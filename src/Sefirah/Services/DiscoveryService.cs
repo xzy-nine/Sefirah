@@ -201,62 +201,62 @@ public class DiscoveryService(
             var message = Encoding.UTF8.GetString(buffer, (int)offset, (int)size);
             
             // 处理Notify-Relay-pc格式的UDP广播消息：NOTIFYRELAY_DISCOVER:{uuid}:{displayName}:{port}
-            if (message.StartsWith("NOTIFYRELAY_DISCOVER:"))
-            {
-                var parts = message.Split(':');
-                if (parts.Length < 4)
+                if (message.StartsWith("NOTIFYRELAY_DISCOVER:"))
                 {
-                    logger.LogWarning("Invalid NOTIFYRELAY_DISCOVER message format: {message}", message);
-                    return;
-                }
-                
-                string uuid = parts[1];
-                string encodedName = parts[2];
-                int port = int.Parse(parts[3]);
-                
-                // 解码displayName
-                string displayName = Encoding.UTF8.GetString(Convert.FromBase64String(encodedName));
-                
-                // 跳过自己
-                if (uuid == localDevice?.DeviceId) return;
-                
-                // 获取发送方IP
-                string ipAddress = ((IPEndPoint)endpoint).Address.ToString();
-                
-                IPEndPoint deviceEndpoint = new IPEndPoint(IPAddress.Parse(ipAddress), port);
-                if (!broadcastEndpoints.Contains(deviceEndpoint))
-                {
-                    broadcastEndpoints.Add(deviceEndpoint);
-                }
-                
-                // 暂时不使用mDNS服务列表检查，因为Notify-Relay-pc不使用mDNS
-                
-                // 由于UDP广播中没有包含publicKey，我们需要在TCP握手时获取
-                // 这里创建一个临时的DiscoveredDevice对象，没有publicKey和sharedSecret
-                DiscoveredDevice device = new(
-                    uuid,
-                    string.Empty, // 暂时为空，TCP握手时会获取
-                    displayName,
-                    Array.Empty<byte>(), // 暂时为空，TCP握手时会派生
-                    DateTimeOffset.UtcNow,
-                    DeviceOrigin.UdpBroadcast);
-                
-                await dispatcher.EnqueueAsync(() =>
-                {
-                    var existingDevice = DiscoveredDevices.FirstOrDefault(d => d.DeviceId == device.DeviceId);
-                    if (existingDevice is not null)
+                    var parts = message.Split(':');
+                    if (parts.Length < 4)
                     {
-                        var index = DiscoveredDevices.IndexOf(existingDevice);
-                        DiscoveredDevices[index] = device;
+                        logger.LogWarning("Invalid NOTIFYRELAY_DISCOVER message format: {message}", message);
+                        return;
                     }
-                    else
+                    
+                    string uuid = parts[1];
+                    string encodedName = parts[2];
+                    int port = int.Parse(parts[3]);
+                    
+                    // 解码displayName
+                    string displayName = Encoding.UTF8.GetString(Convert.FromBase64String(encodedName));
+                    
+                    // 跳过自己
+                    if (uuid == localDevice?.DeviceId) return;
+                    
+                    // 获取发送方IP
+                    string ipAddress = ((IPEndPoint)endpoint).Address.ToString();
+                    
+                    IPEndPoint deviceEndpoint = new IPEndPoint(IPAddress.Parse(ipAddress), port);
+                    if (!broadcastEndpoints.Contains(deviceEndpoint))
                     {
-                        DiscoveredDevices.Add(device);
+                        broadcastEndpoints.Add(deviceEndpoint);
                     }
-                });
-                
-                StartCleanupTimer();
-            }
+                    
+                    await dispatcher.EnqueueAsync(() =>
+                    {
+                        var existingDevice = DiscoveredDevices.FirstOrDefault(d => d.DeviceId == uuid);
+                        if (existingDevice is not null)
+                        {
+                            // 更新现有设备
+                            existingDevice.DeviceName = displayName;
+                            existingDevice.LastSeen = DateTimeOffset.UtcNow;
+                            existingDevice.IsOnline = true;
+                        }
+                        else
+                        {
+                            // 由于UDP广播中没有包含publicKey，我们需要在TCP握手时获取
+                            // 这里创建一个临时的DiscoveredDevice对象，没有publicKey和sharedSecret
+                            DiscoveredDevice device = new(
+                                uuid,
+                                string.Empty, // 暂时为空，TCP握手时会获取
+                                displayName,
+                                Array.Empty<byte>(), // 暂时为空，TCP握手时会派生
+                                DateTimeOffset.UtcNow,
+                                DeviceOrigin.UdpBroadcast);
+                            
+                            DiscoveredDevices.Add(device);
+                        }
+                    });
+                    
+                    StartCleanupTimer();
+                }
             // 兼容处理旧格式的UDP广播
             else if (SocketMessageSerializer.DeserializeMessage(message) is UdpBroadcast broadcast)
             {
@@ -273,24 +273,27 @@ public class DiscoveryService(
                 if (DiscoveredMdnsServices.Any(s => s.PublicKey == broadcast.PublicKey)) return;
                 
                 var sharedSecret = EcdhHelper.DeriveKey(broadcast.PublicKey, localDevice!.PrivateKey);
-                DiscoveredDevice device = new(
-                    broadcast.DeviceId,
-                    broadcast.PublicKey,
-                    broadcast.DeviceName,
-                    sharedSecret,
-                    DateTimeOffset.FromUnixTimeMilliseconds(broadcast.TimeStamp),
-                    DeviceOrigin.UdpBroadcast);
                 
                 await dispatcher.EnqueueAsync(() =>
                 {
-                    var existingDevice = DiscoveredDevices.FirstOrDefault(d => d.DeviceId == device.DeviceId);
+                    var existingDevice = DiscoveredDevices.FirstOrDefault(d => d.DeviceId == broadcast.DeviceId);
                     if (existingDevice is not null)
                     {
-                        var index = DiscoveredDevices.IndexOf(existingDevice);
-                        DiscoveredDevices[index] = device;
+                        // 更新现有设备
+                        existingDevice.LastSeen = DateTimeOffset.FromUnixTimeMilliseconds(broadcast.TimeStamp);
+                        existingDevice.IsOnline = true;
                     }
                     else
                     {
+                        // 添加新设备
+                        DiscoveredDevice device = new(
+                            broadcast.DeviceId,
+                            broadcast.PublicKey,
+                            broadcast.DeviceName,
+                            sharedSecret,
+                            DateTimeOffset.FromUnixTimeMilliseconds(broadcast.TimeStamp),
+                            DeviceOrigin.UdpBroadcast);
+                        
                         DiscoveredDevices.Add(device);
                     }
                 });
@@ -314,7 +317,7 @@ public class DiscoveryService(
             if (_cleanupTimer is not null) return;
 
             _cleanupTimer = dispatcher.CreateTimer();
-            _cleanupTimer.Interval = TimeSpan.FromMilliseconds(250);
+            _cleanupTimer.Interval = TimeSpan.FromSeconds(5); // Change to 5 seconds
             _cleanupTimer.Tick += (s, e) => CleanupStaleDevices();
             _cleanupTimer.Start();
         }
@@ -336,23 +339,18 @@ public class DiscoveryService(
             await dispatcher.EnqueueAsync(() =>
             {
                 var now = DateTimeOffset.UtcNow;
-                var staleThreshold = TimeSpan.FromMilliseconds(500);
+                var staleThreshold = TimeSpan.FromSeconds(10); // Change to 10 seconds
 
-                var staleDevices = DiscoveredDevices
-                    .Where(d => d.Origin is DeviceOrigin.UdpBroadcast &&
-                              now - d.LastSeen > staleThreshold)
-                    .ToList();
-
-                foreach (var device in staleDevices)
+                // 更新离线设备的状态，不再直接删除
+                foreach (var device in DiscoveredDevices.Where(d => d.Origin is DeviceOrigin.UdpBroadcast))
                 {
-                        DiscoveredDevices.Remove(device);
+                    if (now - device.LastSeen > staleThreshold)
+                    {
+                        device.IsOnline = false;
+                    }
                 }
 
-                // Stop timer if no UDP devices left
-                if (!DiscoveredDevices.Any(d => d.Origin is DeviceOrigin.UdpBroadcast))
-                {
-                    StopCleanupTimer();
-                }
+                // 保留定时器运行，以便持续检查设备状态
             });
         }
         catch (Exception ex)

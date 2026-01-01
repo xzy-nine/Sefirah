@@ -2,20 +2,32 @@ using Sefirah.Data.Enums;
 
 namespace Sefirah.Data.Models;
 
-public class DiscoveredDevice(
-    string deviceId, 
-    string publicKey, 
-    string deviceName, 
-    byte[]? hashedKey, 
-    DateTimeOffset lastSeen, 
-    DeviceOrigin origin)
+public class DiscoveredDevice
 {
-    public string DeviceId { get; } = deviceId;
-    public string PublicKey { get; } = publicKey;
-    public string DeviceName { get; } = deviceName;
-    public byte[]? HashedKey { get; } = hashedKey;
-    public DateTimeOffset LastSeen { get; } = lastSeen;
-    public DeviceOrigin Origin { get; } = origin;
+    public string DeviceId { get; set; }
+    public string PublicKey { get; set; }
+    public string DeviceName { get; set; }
+    public byte[]? HashedKey { get; set; }
+    public DateTimeOffset LastSeen { get; set; }
+    public DeviceOrigin Origin { get; set; }
+    public bool IsOnline { get; set; }
+
+    public DiscoveredDevice(
+        string deviceId, 
+        string publicKey, 
+        string deviceName, 
+        byte[]? hashedKey, 
+        DateTimeOffset lastSeen, 
+        DeviceOrigin origin)
+    {
+        DeviceId = deviceId;
+        PublicKey = publicKey;
+        DeviceName = deviceName;
+        HashedKey = hashedKey;
+        LastSeen = lastSeen;
+        Origin = origin;
+        IsOnline = true;
+    }
 
     public string? FormattedKey
     {
