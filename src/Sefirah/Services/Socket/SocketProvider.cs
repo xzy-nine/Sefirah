@@ -5,41 +5,172 @@ using UdpClient = NetCoreServer.UdpClient;
 
 namespace Sefirah.Services.Socket;
 
-public partial class ServerSession(SslServer server, ITcpServerProvider socketProvider) : SslSession(server)
+// 统一的ServerSession类，用于包装NetCoreServer的会话对象
+public class ServerSession
 {
+    private readonly NetCoreServer.TcpSession? _tcpSession;
+    private readonly NetCoreServer.SslSession? _sslSession;
+    
+    public ServerSession(NetCoreServer.TcpSession tcpSession)
+    {
+        _tcpSession = tcpSession;
+    }
+    
+    public ServerSession(NetCoreServer.SslSession sslSession)
+    {
+        _sslSession = sslSession;
+    }
+    
+    // 会话ID
+    public string Id => _tcpSession?.Id.ToString() ?? _sslSession?.Id.ToString() ?? string.Empty;
+    
+    // 会话状态
+    public bool IsConnected => _tcpSession?.IsConnected ?? _sslSession?.IsConnected ?? false;
+    
+    // 会话的Socket对象
+    public System.Net.Sockets.Socket Socket => _tcpSession?.Socket ?? _sslSession?.Socket ?? throw new InvalidOperationException("Session has no socket");
+    
+    // 断开会话
+    public void Disconnect()
+    {
+        if (_tcpSession != null)
+            _tcpSession.Disconnect();
+        else if (_sslSession != null)
+            _sslSession.Disconnect();
+    }
+    
+    // 释放会话资源
+    public void Dispose()
+    {
+        if (_tcpSession != null)
+            _tcpSession.Dispose();
+        else if (_sslSession != null)
+            _sslSession.Dispose();
+    }
+    
+    // 发送消息，适配不同的Send方法重载
+    public void Send(byte[] buffer, long offset, long size)
+    {
+        if (_tcpSession != null)
+            _tcpSession.Send(buffer, (int)offset, (int)size);
+        else if (_sslSession != null)
+            _sslSession.Send(buffer, (int)offset, (int)size);
+    }
+    
+    // 获取内部会话对象
+    public T GetInternalSession<T>() where T : class
+    {
+        if (_tcpSession is T tcpSession) return tcpSession;
+        if (_sslSession is T sslSession) return sslSession;
+        throw new InvalidCastException($"Cannot cast session to {typeof(T).Name}");
+    }
+}
 
+// SSL Session and Server
+public class SslServerSession : NetCoreServer.SslSession
+{
+    private readonly ITcpServerProvider _socketProvider;
+    
+    public SslServerSession(NetCoreServer.SslServer server, ITcpServerProvider socketProvider) : base(server)
+    {
+        _socketProvider = socketProvider;
+    }
+    
     protected override void OnDisconnected()
     {
-        socketProvider.OnDisconnected(this);
+        _socketProvider.OnDisconnected(new ServerSession(this));
     }
 
     protected override void OnConnected()
     {
-        socketProvider.OnConnected(this);
+        _socketProvider.OnConnected(new ServerSession(this));
     }
 
     protected override void OnReceived(byte[] buffer, long offset, long size)
     {
-        socketProvider.OnReceived(this, buffer, offset, size);
+        _socketProvider.OnReceived(new ServerSession(this), buffer, offset, size);
     }
 
     protected override void OnError(SocketError error)
     {
-        socketProvider.OnError(error);
+        _socketProvider.OnError(error);
     }
 }
 
-public partial class Server(SslContext context, IPAddress address, int port, ITcpServerProvider socketProvider, ILogger logger) : SslServer(context, address, port)
+public class SslServer : NetCoreServer.SslServer
 {
-    protected override SslSession CreateSession()
+    private readonly ITcpServerProvider _socketProvider;
+    private readonly ILogger _logger;
+    
+    public SslServer(SslContext context, IPAddress address, int port, ITcpServerProvider socketProvider, ILogger logger) : base(context, address, port)
     {
-        logger.LogDebug("Creating new session");
-        return new ServerSession(this, socketProvider);
+        _socketProvider = socketProvider;
+        _logger = logger;
+    }
+    
+    protected override NetCoreServer.SslSession CreateSession()
+    {
+        _logger.LogDebug("Creating new SSL session");
+        return new SslServerSession(this, _socketProvider);
     }
 
     protected override void OnError(SocketError error)
     {
-        socketProvider.OnError(error);
+        _socketProvider.OnError(error);
+    }
+}
+
+// Plain TCP Session and Server
+public class TcpServerSession : NetCoreServer.TcpSession
+{
+    private readonly ITcpServerProvider _socketProvider;
+    
+    public TcpServerSession(NetCoreServer.TcpServer server, ITcpServerProvider socketProvider) : base(server)
+    {
+        _socketProvider = socketProvider;
+    }
+    
+    protected override void OnDisconnected()
+    {
+        _socketProvider.OnDisconnected(new ServerSession(this));
+    }
+
+    protected override void OnConnected()
+    {
+        _socketProvider.OnConnected(new ServerSession(this));
+    }
+
+    protected override void OnReceived(byte[] buffer, long offset, long size)
+    {
+        _socketProvider.OnReceived(new ServerSession(this), buffer, offset, size);
+    }
+
+    protected override void OnError(SocketError error)
+    {
+        _socketProvider.OnError(error);
+    }
+}
+
+public class TcpServer : NetCoreServer.TcpServer
+{
+    private readonly ITcpServerProvider _socketProvider;
+    private readonly ILogger _logger;
+    
+    public TcpServer(IPAddress address, int port, ITcpServerProvider socketProvider, ILogger logger) : base(address, port)
+    {
+        _socketProvider = socketProvider;
+        _logger = logger;
+    }
+    
+    protected override NetCoreServer.TcpSession CreateSession()
+    {
+        _logger.LogDebug("Creating new TCP session");
+        return new TcpServerSession(this, _socketProvider);
+    }
+
+    protected override void OnError(SocketError error)
+    {
+        _socketProvider.OnError(error);
     }
 }
 

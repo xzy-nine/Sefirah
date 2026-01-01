@@ -83,7 +83,18 @@ public class DeviceRepository(DatabaseContext context, ILogger logger)
 
     public List<string> GetRemoteDeviceIpAddresses()
     {
-        return context.Database.Table<RemoteDeviceEntity>().SelectMany(d => d.IpAddresses).ToList();
+        // 先获取所有RemoteDeviceEntity对象，然后在内存中处理IpAddresses属性
+        // 因为IpAddresses是被忽略的属性，SQLite-net无法直接在查询中使用它
+        var devices = context.Database.Table<RemoteDeviceEntity>().ToList();
+        var ipAddresses = new List<string>();
+        
+        foreach (var device in devices)
+        {
+            // IpAddresses属性的getter已经处理了null情况，返回空列表
+            ipAddresses.AddRange(device.IpAddresses);
+        }
+        
+        return ipAddresses;
     }
 }
  

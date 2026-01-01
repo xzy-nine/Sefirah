@@ -25,11 +25,11 @@ public class DiscoveryService(
     private readonly DispatcherQueue dispatcher = DispatcherQueue.GetForCurrentThread();
     private const string DEFAULT_BROADCAST = "255.255.255.255";
     private LocalDeviceEntity? localDevice;
-    private readonly int port = 5149;
+    private readonly int port = 23334;
     public ObservableCollection<DiscoveredDevice> DiscoveredDevices { get; } = [];
     public List<DiscoveredMdnsServiceArgs> DiscoveredMdnsServices { get; } = [];
     private List<IPEndPoint> broadcastEndpoints = [];
-    private const int DiscoveryPort = 5149;
+    private const int DiscoveryPort = 23334;
 
     public async Task StartDiscoveryAsync()
     {
@@ -88,6 +88,7 @@ public class DiscoveryService(
                 udpClient.Socket.EnableBroadcast = true;
                 logger.LogInformation("UDP Client connected successfully {port}", port);
 
+                // 直接使用DiscoveryPort作为UDP广播的端口，因为Notify-Relay-pc使用固定端口23333
                 BroadcastDeviceInfoAsync(udpBroadcast);
             }
             else
@@ -109,9 +110,11 @@ public class DiscoveryService(
     {
         while (udpClient is not null)
         {
-            udpBroadcast.TimeStamp = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeMilliseconds();
-            string jsonMessage = SocketMessageSerializer.Serialize(udpBroadcast);
-            byte[] messageBytes = Encoding.UTF8.GetBytes(jsonMessage);
+            // 使用Notify-Relay-pc的UDP广播格式：NOTIFYRELAY_DISCOVER:{uuid}:{displayName}:{port}
+            // displayName使用Base64(NO_WRAP)编码
+            string encodedName = Convert.ToBase64String(Encoding.UTF8.GetBytes(udpBroadcast.DeviceName), Base64FormattingOptions.None);
+            string message = $"NOTIFYRELAY_DISCOVER:{udpBroadcast.DeviceId}:{encodedName}:{networkService.ServerPort}";
+            byte[] messageBytes = Encoding.UTF8.GetBytes(message);
             foreach (var endPoint in broadcastEndpoints)
             {
                 try
@@ -124,7 +127,7 @@ public class DiscoveryService(
                 }
             }
 
-            await Task.Delay(1000);
+            await Task.Delay(2000); // 改为2秒发送一次
         }
     }
 
@@ -196,44 +199,104 @@ public class DiscoveryService(
         try
         {
             var message = Encoding.UTF8.GetString(buffer, (int)offset, (int)size);
-            if (SocketMessageSerializer.DeserializeMessage(message) is not UdpBroadcast broadcast) return;
-
-            if (broadcast.DeviceId == localDevice?.DeviceId) return;
-
-            IPEndPoint? deviceEndpoint = broadcast.IpAddresses.Select(ip => new IPEndPoint(IPAddress.Parse(ip), DiscoveryPort)).FirstOrDefault();
-
-            if (deviceEndpoint is not null && !broadcastEndpoints.Contains(deviceEndpoint))
+            
+            // 处理Notify-Relay-pc格式的UDP广播消息：NOTIFYRELAY_DISCOVER:{uuid}:{displayName}:{port}
+            if (message.StartsWith("NOTIFYRELAY_DISCOVER:"))
             {
-                broadcastEndpoints.Add(deviceEndpoint);
+                var parts = message.Split(':');
+                if (parts.Length < 4)
+                {
+                    logger.LogWarning("Invalid NOTIFYRELAY_DISCOVER message format: {message}", message);
+                    return;
+                }
+                
+                string uuid = parts[1];
+                string encodedName = parts[2];
+                int port = int.Parse(parts[3]);
+                
+                // 解码displayName
+                string displayName = Encoding.UTF8.GetString(Convert.FromBase64String(encodedName));
+                
+                // 跳过自己
+                if (uuid == localDevice?.DeviceId) return;
+                
+                // 获取发送方IP
+                string ipAddress = ((IPEndPoint)endpoint).Address.ToString();
+                
+                IPEndPoint deviceEndpoint = new IPEndPoint(IPAddress.Parse(ipAddress), port);
+                if (!broadcastEndpoints.Contains(deviceEndpoint))
+                {
+                    broadcastEndpoints.Add(deviceEndpoint);
+                }
+                
+                // 暂时不使用mDNS服务列表检查，因为Notify-Relay-pc不使用mDNS
+                
+                // 由于UDP广播中没有包含publicKey，我们需要在TCP握手时获取
+                // 这里创建一个临时的DiscoveredDevice对象，没有publicKey和sharedSecret
+                DiscoveredDevice device = new(
+                    uuid,
+                    string.Empty, // 暂时为空，TCP握手时会获取
+                    displayName,
+                    Array.Empty<byte>(), // 暂时为空，TCP握手时会派生
+                    DateTimeOffset.UtcNow,
+                    DeviceOrigin.UdpBroadcast);
+                
+                await dispatcher.EnqueueAsync(() =>
+                {
+                    var existingDevice = DiscoveredDevices.FirstOrDefault(d => d.DeviceId == device.DeviceId);
+                    if (existingDevice is not null)
+                    {
+                        var index = DiscoveredDevices.IndexOf(existingDevice);
+                        DiscoveredDevices[index] = device;
+                    }
+                    else
+                    {
+                        DiscoveredDevices.Add(device);
+                    }
+                });
+                
+                StartCleanupTimer();
             }
-
-            // Skip if we already have this device via mDNS
-            if (DiscoveredMdnsServices.Any(s => s.PublicKey == broadcast.PublicKey)) return;
-
-            var sharedSecret = EcdhHelper.DeriveKey(broadcast.PublicKey, localDevice!.PrivateKey);
-            DiscoveredDevice device = new(
-                broadcast.DeviceId,
-                broadcast.PublicKey,
-                broadcast.DeviceName,
-                sharedSecret,
-                DateTimeOffset.FromUnixTimeMilliseconds(broadcast.TimeStamp),
-                DeviceOrigin.UdpBroadcast);
-
-            await dispatcher.EnqueueAsync(() =>
+            // 兼容处理旧格式的UDP广播
+            else if (SocketMessageSerializer.DeserializeMessage(message) is UdpBroadcast broadcast)
             {
-                var existingDevice = DiscoveredDevices.FirstOrDefault(d => d.DeviceId == device.DeviceId);
-                if (existingDevice is not null)
+                if (broadcast.DeviceId == localDevice?.DeviceId) return;
+                
+                IPEndPoint? deviceEndpoint = broadcast.IpAddresses.Select(ip => new IPEndPoint(IPAddress.Parse(ip), DiscoveryPort)).FirstOrDefault();
+                
+                if (deviceEndpoint is not null && !broadcastEndpoints.Contains(deviceEndpoint))
                 {
-                    var index = DiscoveredDevices.IndexOf(existingDevice);
-                    DiscoveredDevices[index] = device;
+                    broadcastEndpoints.Add(deviceEndpoint);
                 }
-                else
+                
+                // Skip if we already have this device via mDNS
+                if (DiscoveredMdnsServices.Any(s => s.PublicKey == broadcast.PublicKey)) return;
+                
+                var sharedSecret = EcdhHelper.DeriveKey(broadcast.PublicKey, localDevice!.PrivateKey);
+                DiscoveredDevice device = new(
+                    broadcast.DeviceId,
+                    broadcast.PublicKey,
+                    broadcast.DeviceName,
+                    sharedSecret,
+                    DateTimeOffset.FromUnixTimeMilliseconds(broadcast.TimeStamp),
+                    DeviceOrigin.UdpBroadcast);
+                
+                await dispatcher.EnqueueAsync(() =>
                 {
-                    DiscoveredDevices.Add(device);
-                }
-            });
-
-            StartCleanupTimer();
+                    var existingDevice = DiscoveredDevices.FirstOrDefault(d => d.DeviceId == device.DeviceId);
+                    if (existingDevice is not null)
+                    {
+                        var index = DiscoveredDevices.IndexOf(existingDevice);
+                        DiscoveredDevices[index] = device;
+                    }
+                    else
+                    {
+                        DiscoveredDevices.Add(device);
+                    }
+                });
+                
+                StartCleanupTimer();
+            }
         }
         catch (Exception ex)
         {
