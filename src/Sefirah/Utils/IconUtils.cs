@@ -78,11 +78,30 @@ public static class IconUtils
     }
 
     /// <summary>
+    /// Checks if an app icon file exists for the given package name
+    /// </summary>
+    /// <param name="packageName">App package name</param>
+    /// <returns>True if the icon file exists, false otherwise</returns>
+    public static bool AppIconExists(string packageName)
+    {
+        try
+        {
+            string iconFilePath = GetAppIconFilePath(packageName);
+            return File.Exists(iconFilePath);
+        }
+        catch (Exception)
+        {
+            // If any error occurs, assume the icon doesn't exist
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Saves app icon bytes to the AppIcons folder and returns the file system path
     /// </summary>
     /// <param name="appIconBase64">Base64 encoded app icon data</param>
     /// <param name="appPackage">App package name</param>
-    public static async void SaveAppIconToPathAsync(string? appIconBase64, string appPackage)
+    public static async Task SaveAppIconToPathAsync(string? appIconBase64, string appPackage)
     {
         try
         {

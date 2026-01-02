@@ -191,6 +191,136 @@ public class NetworkService(
             }
         });
     }
+    
+    /// <summary>
+    /// 发送图标请求
+    /// </summary>
+    /// <param name="deviceId">设备 ID</param>
+    /// <param name="packageNames">应用包名列表</param>
+    public void SendIconRequest(string deviceId, List<string> packageNames)
+    {
+        logger.LogInformation("开始发送图标请求：deviceId={deviceId}, packageCount={packageCount}", deviceId, packageNames.Count);
+        
+        Task.Run(async () =>
+        {
+            try
+            {
+                var device = PairedDevices.FirstOrDefault(d => d.Id == deviceId);
+                if (device is null)
+                {
+                    logger.LogWarning("跳过发送：未找到设备 {deviceId}", deviceId);
+                    return;
+                }
+                
+                logger.LogDebug("找到设备：deviceId={deviceId}, name={deviceName}", deviceId, device.Name);
+
+                if (device.SharedSecret is null)
+                {
+                    logger.LogWarning("无法发送加密消息：设备 {deviceId} 缺少共享密钥", deviceId);
+                    return;
+                }
+                
+                logger.LogDebug("设备有共享密钥，继续发送");
+
+                if (localPublicKey is null || localDeviceId is null)
+                {
+                    logger.LogWarning("本地身份未初始化，跳过发送");
+                    return;
+                }
+                
+                logger.LogDebug("本地身份已初始化，继续发送");
+
+                // 尝试获取设备的IP地址
+                if (device.IpAddresses is null || device.IpAddresses.Count == 0)
+                {
+                    logger.LogWarning("跳过发送：设备 {deviceId} 没有IP地址", deviceId);
+                    return;
+                }
+                
+                string ipAddress = device.IpAddresses.First();
+                const int notifyRelayPort = 23333; // 使用与本机相同的端口
+                logger.LogDebug("使用设备IP地址：{ipAddress}:{port}", ipAddress, notifyRelayPort);
+
+                // 构建图标请求对象（支持单个或多个包名）
+                object requestObj;
+                if (packageNames.Count == 1)
+                {
+                    requestObj = new
+                    {
+                        type = "ICON_REQUEST",
+                        packageName = packageNames.First(),
+                        time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                    };
+                }
+                else
+                {
+                    requestObj = new
+                    {
+                        type = "ICON_REQUEST",
+                        packageNames = packageNames,
+                        time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+                    };
+                }
+                
+                // 序列化为 JSON
+                string requestJson = JsonSerializer.Serialize(requestObj);
+                
+                logger.LogInformation("图标请求 JSON：{requestJson}", requestJson);
+                
+                try
+                {
+                    logger.LogDebug("开始加密消息");
+                    var encryptedPayload = NotifyCryptoHelper.Encrypt(requestJson, device.SharedSecret);
+                    logger.LogDebug("消息加密成功，长度={length}", encryptedPayload.Length);
+                    
+                    var framedMessage = $"DATA_ICON_REQUEST:{localDeviceId}:{localPublicKey}:{encryptedPayload}\n";
+                    logger.LogDebug("构建的完整消息：{framedMessage}", framedMessage.Length > 100 ? framedMessage[..100] + "..." : framedMessage);
+                    
+                    byte[] messageBytes = Encoding.UTF8.GetBytes(framedMessage);
+                    logger.LogDebug("消息字节长度：{length}", messageBytes.Length);
+
+                    // 使用TCP客户端主动连接并发送消息
+                    using var tcpClient = new System.Net.Sockets.TcpClient();
+                    logger.LogDebug("正在连接到设备：{ipAddress}:{port}", ipAddress, notifyRelayPort);
+                    await tcpClient.ConnectAsync(ipAddress, notifyRelayPort);
+                    logger.LogDebug("连接成功");
+                    
+                    using var networkStream = tcpClient.GetStream();
+                    await networkStream.WriteAsync(messageBytes, 0, messageBytes.Length);
+                    logger.LogInformation("成功发送图标请求：deviceId={deviceId}, packageCount={packageCount}", deviceId, packageNames.Count);
+                    
+                    // 关闭连接
+                    tcpClient.Close();
+                }
+                catch (ObjectDisposedException ex)
+                {
+                    logger.LogError(ex, "发送图标请求时 Socket 已释放：deviceId={deviceId}", deviceId);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "发送图标请求时出错：deviceId={deviceId}", deviceId);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "发送图标请求时出错：deviceId={deviceId}", deviceId);
+            }
+            finally
+            {
+                logger.LogInformation("图标请求发送流程结束：deviceId={deviceId}", deviceId);
+            }
+        });
+    }
+    
+    /// <summary>
+    /// 发送图标请求（单个包名）
+    /// </summary>
+    /// <param name="deviceId">设备 ID</param>
+    /// <param name="packageName">应用包名</param>
+    public void SendIconRequest(string deviceId, string packageName)
+    {
+        SendIconRequest(deviceId, new List<string> { packageName });
+    }
 
     public void SendMessage(string deviceId, string message)
     {

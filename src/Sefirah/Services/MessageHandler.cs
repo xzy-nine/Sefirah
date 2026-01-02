@@ -9,6 +9,7 @@ namespace Sefirah.Services;
 public class MessageHandler(
     RemoteAppRepository remoteAppRepository,
     IDeviceManager deviceManager,
+    INetworkService networkService,
     INotificationService notificationService,
     IClipboardService clipboardService,
     SmsHandlerService smsHandlerService,
@@ -122,7 +123,7 @@ public class MessageHandler(
                     break;
                 case "ICON_RESPONSE":
                     logger.LogDebug("处理 ICON_RESPONSE 消息");
-                    HandleIconResponse(device, root);
+                    await HandleIconResponseAsync(device, root);
                     break;
                 default:
                     logger.LogWarning("不支持的 JSON 消息类型：{messageType}", messageType);
@@ -185,6 +186,23 @@ public class MessageHandler(
             };
             
             remoteAppRepository.UpdateApplicationList(device, applicationList);
+            
+            // 收集所有没有图标的应用的包名
+            var packageNamesWithoutIcons = new List<string>();
+            foreach (var appInfo in apps)
+            {
+                // 只有当应用没有图标时才添加到列表中
+                if (!IconUtils.AppIconExists(appInfo.PackageName))
+                {
+                    packageNamesWithoutIcons.Add(appInfo.PackageName);
+                }
+            }
+            
+            // 发送批量图标请求
+            if (packageNamesWithoutIcons.Count > 0)
+            {
+                networkService.SendIconRequest(device.Id, packageNamesWithoutIcons);
+            }
         }
         catch (Exception ex)
         {
@@ -193,45 +211,90 @@ public class MessageHandler(
     }
     
     /// <summary>
-    /// 处理图标响应
+    /// 处理图标响应（支持单个或批量）
     /// </summary>
     /// <param name="device">设备</param>
     /// <param name="root">JSON 根元素</param>
-    private void HandleIconResponse(PairedDevice device, JsonElement root)
+    private async Task HandleIconResponseAsync(PairedDevice device, JsonElement root)
     {
         try
         {
-            // 获取包名
-            if (!root.TryGetProperty("packageName", out var packageProp))
+            // 检查是否为批量图标响应
+            if (root.TryGetProperty("icons", out var iconsArray))
             {
-                logger.LogWarning("ICON_RESPONSE 缺少 packageName 属性");
-                return;
+                // 处理批量图标响应
+                int savedCount = 0;
+                foreach (var iconElement in iconsArray.EnumerateArray())
+                {
+                    // 获取包名
+                    if (!iconElement.TryGetProperty("packageName", out var packageProp))
+                    {
+                        logger.LogWarning("批量 ICON_RESPONSE 中的图标缺少 packageName 属性");
+                        continue;
+                    }
+                    
+                    var packageName = packageProp.GetString();
+                    if (string.IsNullOrEmpty(packageName))
+                    {
+                        logger.LogWarning("批量 ICON_RESPONSE 中的图标 packageName 为空");
+                        continue;
+                    }
+                    
+                    // 获取图标数据
+                    if (!iconElement.TryGetProperty("iconData", out var iconDataProp))
+                    {
+                        logger.LogWarning("批量 ICON_RESPONSE 中的图标缺少 iconData 属性");
+                        continue;
+                    }
+                    
+                    var iconData = iconDataProp.GetString();
+                    if (string.IsNullOrEmpty(iconData))
+                    {
+                        logger.LogWarning("批量 ICON_RESPONSE 中的图标 iconData 为空");
+                        continue;
+                    }
+                    
+                    // 保存图标
+                    await IconUtils.SaveAppIconToPathAsync(iconData, packageName);
+                    savedCount++;
+                }
+                logger.LogDebug("已保存 {savedCount} 个应用图标", savedCount);
             }
-            
-            var packageName = packageProp.GetString();
-            if (string.IsNullOrEmpty(packageName))
+            else
             {
-                logger.LogWarning("ICON_RESPONSE 的 packageName 为空");
-                return;
+                // 处理单个图标响应
+                // 获取包名
+                if (!root.TryGetProperty("packageName", out var packageProp))
+                {
+                    logger.LogWarning("ICON_RESPONSE 缺少 packageName 属性");
+                    return;
+                }
+                
+                var packageName = packageProp.GetString();
+                if (string.IsNullOrEmpty(packageName))
+                {
+                    logger.LogWarning("ICON_RESPONSE 的 packageName 为空");
+                    return;
+                }
+                
+                // 获取图标数据
+                if (!root.TryGetProperty("iconData", out var iconDataProp))
+                {
+                    logger.LogWarning("ICON_RESPONSE 缺少 iconData 属性");
+                    return;
+                }
+                
+                var iconData = iconDataProp.GetString();
+                if (string.IsNullOrEmpty(iconData))
+                {
+                    logger.LogWarning("ICON_RESPONSE 的 iconData 为空");
+                    return;
+                }
+                
+                // 保存图标
+                await IconUtils.SaveAppIconToPathAsync(iconData, packageName);
+                logger.LogDebug("已保存应用 {packageName} 的图标", packageName);
             }
-            
-            // 获取图标数据
-            if (!root.TryGetProperty("iconData", out var iconDataProp))
-            {
-                logger.LogWarning("ICON_RESPONSE 缺少 iconData 属性");
-                return;
-            }
-            
-            var iconData = iconDataProp.GetString();
-            if (string.IsNullOrEmpty(iconData))
-            {
-                logger.LogWarning("ICON_RESPONSE 的 iconData 为空");
-                return;
-            }
-            
-            // 保存图标
-            IconUtils.SaveAppIconToPathAsync(iconData, packageName);
-            logger.LogDebug("已保存应用 {packageName} 的图标", packageName);
         }
         catch (Exception ex)
         {

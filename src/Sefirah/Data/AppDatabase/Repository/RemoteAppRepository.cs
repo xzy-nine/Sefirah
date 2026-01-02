@@ -193,7 +193,12 @@ public class RemoteAppRepository(DatabaseContext context, ILogger logger, INetwo
             }
 
             await LoadApplicationsFromDevice(pairedDevice.Id);
-            ApplicationListUpdated?.Invoke(this, pairedDevice.Id);
+            
+            // 确保在UI线程上触发事件，避免COMException
+            await App.MainWindow.DispatcherQueue.EnqueueAsync(() =>
+            {
+                ApplicationListUpdated?.Invoke(this, pairedDevice.Id);
+            });
         }
         catch (Exception ex)
         {
