@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using CommunityToolkit.Mvvm.DependencyInjection;
 using CommunityToolkit.WinUI;
 using NetCoreServer;
 using Sefirah.Data.Contracts;
@@ -30,6 +31,8 @@ public class NetworkService(
     private string? localPublicKey;
     private string? localDeviceId;
     private Timer? heartbeatTimer;
+    private readonly TimeSpan heartbeatInterval = TimeSpan.FromSeconds(5);
+    private readonly TimeSpan heartbeatTimeout = TimeSpan.FromSeconds(60);
     
     private ObservableCollection<PairedDevice> PairedDevices => deviceManager.PairedDevices;
 
@@ -82,7 +85,13 @@ public class NetworkService(
         try
         {
             var device = PairedDevices.FirstOrDefault(d => d.Session?.Id == session.Id);
-            if (device?.SharedSecret is null)
+            if (device is null)
+            {
+                logger.LogWarning("Cannot send message, no paired device for session {id}", session.Id);
+                return;
+            }
+
+            if (device.SharedSecret is null)
             {
                 logger.LogWarning("Cannot send encrypted message, shared secret missing for session {id}", session.Id);
                 return;
@@ -220,29 +229,38 @@ public class NetworkService(
 
         var remoteDeviceId = parts[1];
         var remotePublicKey = parts[2];
+        var discoveredName = PairedDevices.FirstOrDefault(d => d.Id == remoteDeviceId)?.Name;
+
+        if (discoveredName is null)
+        {
+            var discovery = Ioc.Default.GetService<IDiscoveryService>();
+            discoveredName = discovery?.DiscoveredDevices.FirstOrDefault(d => d.DeviceId == remoteDeviceId)?.DeviceName;
+        }
         var connectedSessionIpAddress = session.Socket.RemoteEndPoint?.ToString()?.Split(':')[0];
         logger.Info($"Received handshake from {connectedSessionIpAddress}");
 
-        var device = await deviceManager.VerifyHandshakeAsync(remoteDeviceId, remotePublicKey, null, connectedSessionIpAddress);
+        var device = await deviceManager.VerifyHandshakeAsync(remoteDeviceId, remotePublicKey, discoveredName, connectedSessionIpAddress);
 
         if (device is not null)
         {
             logger.Info($"Device {device.Id} connected");
 
-            deviceManager.UpdateOrAddDevice(device, connectedDevice  =>
+            device = await deviceManager.UpdateOrAddDeviceAsync(device, connectedDevice  =>
             {
                 connectedDevice.ConnectionStatus = true;
                 connectedDevice.Session = session;
                 connectedDevice.RemotePublicKey = remotePublicKey;
                 connectedDevice.SharedSecret ??= NotifyCryptoHelper.GenerateSharedSecretBytes(localPublicKey ?? string.Empty, remotePublicKey);
                 deviceManager.ActiveDevice = connectedDevice;
-                device = connectedDevice;
+                connectedDevice.LastHeartbeat = DateTime.UtcNow;
 
-                if (device.DeviceSettings.AdbAutoConnect && !string.IsNullOrEmpty(connectedSessionIpAddress))
+                if (connectedDevice.DeviceSettings.AdbAutoConnect && !string.IsNullOrEmpty(connectedSessionIpAddress))
                 {
                     adbService.TryConnectTcp(connectedSessionIpAddress);
                 }
             });
+
+            ConnectionStatusChanged?.Invoke(this, (device, true));
 
             if (localDeviceId is not null && localPublicKey is not null)
             {
@@ -266,7 +284,7 @@ public class NetworkService(
         {
             if (message.StartsWith("HEARTBEAT:"))
             {
-                device.ConnectionStatus = true;
+                MarkDeviceAlive(device);
                 return;
             }
 
@@ -288,12 +306,14 @@ public class NetworkService(
                 var encryptedPayload = string.Join(":", parts.Skip(3));
                 var decryptedPayload = NotifyCryptoHelper.Decrypt(encryptedPayload, device.SharedSecret);
 
+                MarkDeviceAlive(device);
                 await DispatchPayloadAsync(device, decryptedPayload);
                 return;
             }
 
             if (message.TrimStart().StartsWith('{') || message.TrimStart().StartsWith('['))
             {
+                MarkDeviceAlive(device);
                 await DispatchPayloadAsync(device, message);
                 return;
             }
@@ -332,7 +352,11 @@ public class NetworkService(
             {
                 App.MainWindow.DispatcherQueue.EnqueueAsync(() =>
                 {
-                    device.ConnectionStatus = false;
+                    if (device.ConnectionStatus)
+                    {
+                        device.ConnectionStatus = false;
+                        ConnectionStatusChanged?.Invoke(this, (device, false));
+                    }
                     device.Session = null;
                     logger.Info($"Device {device.Name} session disconnected, status updated");
                 });
@@ -344,12 +368,22 @@ public class NetworkService(
         }
     }
 
-    private void StartHeartbeat()
+    private void MarkDeviceAlive(PairedDevice device)
     {
-        heartbeatTimer ??= new Timer(_ => SendHeartbeat(), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(5));
+        device.LastHeartbeat = DateTime.UtcNow;
+        if (!device.ConnectionStatus)
+        {
+            device.ConnectionStatus = true;
+            ConnectionStatusChanged?.Invoke(this, (device, true));
+        }
     }
 
-    private void SendHeartbeat()
+    private void StartHeartbeat()
+    {
+        heartbeatTimer ??= new Timer(_ => HeartbeatTick(), null, heartbeatInterval, heartbeatInterval);
+    }
+
+    private void HeartbeatTick()
     {
         try
         {
@@ -358,24 +392,23 @@ public class NetworkService(
             var payload = $"HEARTBEAT:{localDeviceId}:{localPublicKey}\n";
             var bytes = Encoding.UTF8.GetBytes(payload);
 
-            List<ServerSession> sessions;
-            lock (PairedDevices)
+            foreach (var device in PairedDevices.ToList())
             {
-                sessions = PairedDevices
-                    .Where(d => d.Session is not null)
-                    .Select(d => d.Session!)
-                    .ToList();
-            }
-
-            foreach (var session in sessions)
-            {
-                try
+                if (device.Session is not null)
                 {
-                    session.Send(bytes, 0, bytes.Length);
+                    try
+                    {
+                        device.Session.Send(bytes, 0, bytes.Length);
+                    }
+                    catch
+                    {
+                        // Ignore transient send errors
+                    }
                 }
-                catch
+
+                if (device.Session is not null && device.LastHeartbeat.HasValue && DateTime.UtcNow - device.LastHeartbeat > heartbeatTimeout)
                 {
-                    // Ignore transient send errors
+                    DisconnectSession(device.Session!);
                 }
             }
         }

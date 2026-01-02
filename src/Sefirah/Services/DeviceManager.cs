@@ -32,10 +32,13 @@ public partial class DeviceManager(ILogger<DeviceManager> logger, DeviceReposito
 
     /// <summary>
     /// Updates an existing device in the collection or adds it if it doesn't exist.
+    /// Returns the live instance stored in the collection for further updates.
     /// </summary>
-    public void UpdateOrAddDevice(PairedDevice device, Action<PairedDevice>? updateAction = null)
+    public async Task<PairedDevice> UpdateOrAddDeviceAsync(PairedDevice device, Action<PairedDevice>? updateAction = null)
     {
-        App.MainWindow?.DispatcherQueue.EnqueueAsync(() =>
+        var tcs = new TaskCompletionSource<PairedDevice>();
+
+        await App.MainWindow.DispatcherQueue.EnqueueAsync(() =>
         {
             var existingDevice = PairedDevices.FirstOrDefault(d => d.Id == device.Id);
             if (existingDevice is not null)
@@ -49,13 +52,17 @@ public partial class DeviceManager(ILogger<DeviceManager> logger, DeviceReposito
                 existingDevice.SharedSecret = device.SharedSecret;
                 existingDevice.RemotePublicKey = device.RemotePublicKey;
                 updateAction?.Invoke(existingDevice);
+                tcs.SetResult(existingDevice);
             }
             else
             {
                 PairedDevices.Add(device);
                 updateAction?.Invoke(device);
+                tcs.SetResult(device);
             }
         });
+
+        return await tcs.Task;
     }
 
     public Task<RemoteDeviceEntity> GetDeviceInfoAsync(string deviceId)
@@ -77,11 +84,22 @@ public partial class DeviceManager(ILogger<DeviceManager> logger, DeviceReposito
     {
         App.MainWindow.DispatcherQueue.EnqueueAsync(() =>
         {
-            PairedDevices.Remove(device);
-            repository.DeletePairedDevice(device.Id);
-            if (ActiveDevice?.Id == device.Id)
+            try
             {
-                ActiveDevice = PairedDevices.FirstOrDefault();
+                var existing = PairedDevices.FirstOrDefault(d => d.Id == device.Id);
+                if (existing is null) return;
+
+                PairedDevices.Remove(existing);
+                repository.DeletePairedDevice(existing.Id);
+
+                if (ActiveDevice?.Id == existing.Id)
+                {
+                    ActiveDevice = PairedDevices.FirstOrDefault();
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error removing device {id}", device.Id);
             }
         });
     }

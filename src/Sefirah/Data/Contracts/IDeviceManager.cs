@@ -24,7 +24,7 @@ public interface IDeviceManager
     /// Updates an existing device in the collection or adds it if it doesn't exist.
     /// This method is thread-safe and handles UI thread dispatching internally.
     /// </summary>
-    void UpdateOrAddDevice(PairedDevice device, Action<PairedDevice>? updateAction = null);
+    Task<PairedDevice> UpdateOrAddDeviceAsync(PairedDevice device, Action<PairedDevice>? updateAction = null);
 
     /// <summary>
     /// Gets the device info.

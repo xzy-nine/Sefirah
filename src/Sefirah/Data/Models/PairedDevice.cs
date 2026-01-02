@@ -53,6 +53,7 @@ public partial class PairedDevice : ObservableObject
     // Notify 协议会话所需信息
     public byte[]? SharedSecret { get; set; }
     public string? RemotePublicKey { get; set; }
+    public DateTime? LastHeartbeat { get; set; }
 
     private readonly IAdbService adbService;
     private readonly IUserSettingsService userSettingsService;
