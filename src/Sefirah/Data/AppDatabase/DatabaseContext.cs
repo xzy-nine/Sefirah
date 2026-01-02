@@ -39,6 +39,7 @@ public class DatabaseContext
             // Check if Model column exists, if not add it (migration for existing databases)
             var remoteDeviceColumns = db.GetTableInfo(nameof(RemoteDeviceEntity));
             var hasModelColumn = remoteDeviceColumns.Any(col => col.Name.Equals("Model", StringComparison.OrdinalIgnoreCase));
+            var hasPublicKeyColumn = remoteDeviceColumns.Any(col => col.Name.Equals("PublicKey", StringComparison.OrdinalIgnoreCase));
             
             if (!hasModelColumn)
             {
@@ -49,6 +50,18 @@ public class DatabaseContext
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"Migration warning: Could not add Model column: {ex.Message}");
+                }
+            }
+
+            if (!hasPublicKeyColumn)
+            {
+                try
+                {
+                    db.Execute("ALTER TABLE RemoteDeviceEntity ADD COLUMN PublicKey TEXT");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Migration warning: Could not add PublicKey column: {ex.Message}");
                 }
             }
         }

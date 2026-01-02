@@ -50,6 +50,10 @@ public partial class PairedDevice : ObservableObject
         set => SetProperty(ref session, value);
     }
 
+    // Notify 协议会话所需信息
+    public byte[]? SharedSecret { get; set; }
+    public string? RemotePublicKey { get; set; }
+
     private readonly IAdbService adbService;
     private readonly IUserSettingsService userSettingsService;
 

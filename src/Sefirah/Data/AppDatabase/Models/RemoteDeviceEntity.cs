@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Sefirah.Data.Models;
 using Sefirah.Helpers;
 using SQLite;
@@ -12,6 +13,9 @@ public partial class RemoteDeviceEntity
     public string Name { get; set; } = string.Empty;
 
     public string Model { get; set; } = string.Empty;
+
+    // Notify 协议远端公钥（用于 HKDF 派生对称密钥）
+    public string? PublicKey { get; set; }
 
     public byte[]? SharedSecret { get; set; }
 
@@ -49,6 +53,8 @@ public partial class RemoteDeviceEntity
             IpAddresses = IpAddresses,
             PhoneNumbers = PhoneNumbers,
             Wallpaper = await ImageHelper.ToBitmapAsync(WallpaperBytes),
+            SharedSecret = SharedSecret,
+            RemotePublicKey = PublicKey,
         };
     }
     #endregion

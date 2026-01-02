@@ -1,5 +1,4 @@
 using CommunityToolkit.WinUI;
-using Org.BouncyCastle.Crypto.Parameters;
 using Sefirah.Data.AppDatabase.Models;
 using Sefirah.Data.AppDatabase.Repository;
 using Sefirah.Data.Contracts;
@@ -7,6 +6,7 @@ using Sefirah.Data.Models;
 using Sefirah.Dialogs;
 using Sefirah.Helpers;
 using Sefirah.Utils;
+using System.Text;
 
 namespace Sefirah.Services;
 
@@ -46,6 +46,8 @@ public partial class DeviceManager(ILogger<DeviceManager> logger, DeviceReposito
                 existingDevice.PhoneNumbers = device.PhoneNumbers;
                 existingDevice.Wallpaper = device.Wallpaper;
                 existingDevice.Session = device.Session;
+                existingDevice.SharedSecret = device.SharedSecret;
+                existingDevice.RemotePublicKey = device.RemotePublicKey;
                 updateAction?.Invoke(existingDevice);
             }
             else
@@ -98,59 +100,40 @@ public partial class DeviceManager(ILogger<DeviceManager> logger, DeviceReposito
         });
     }
 
-    public async Task<PairedDevice?> VerifyDevice(DeviceInfo device, string? ipAddress)
+    public async Task<PairedDevice?> VerifyHandshakeAsync(string deviceId, string remotePublicKey, string? deviceName, string? ipAddress)
     {
         try
         {
-            // If device exists and we've already verified it before, validate the proof
-            if (repository.HasDevice(device.DeviceId, out var existingDevice))
+            var localDevice = await GetLocalDeviceAsync();
+            var localKey = Encoding.UTF8.GetString(localDevice.PublicKey ?? Array.Empty<byte>());
+            var sharedSecretBytes = NotifyCryptoHelper.GenerateSharedSecretBytes(localKey, remotePublicKey);
+            var passkey = NotifyCryptoHelper.ComputePasskey(sharedSecretBytes);
+
+            if (repository.HasDevice(deviceId, out var existingDevice))
             {
-                if (!EcdhHelper.VerifyProof(existingDevice.SharedSecret!, device.Nonce!, device.Proof!)) { return null; }
-
-                // Update device info
                 existingDevice.LastConnected = DateTime.Now;
-                existingDevice.Name = device.DeviceName;
-                existingDevice.Model = device.Model!;
+                existingDevice.Name = deviceName ?? existingDevice.Name;
+                existingDevice.PublicKey = remotePublicKey;
+                existingDevice.SharedSecret = sharedSecretBytes;
 
-                if (!string.IsNullOrEmpty(device.Avatar))
-                {
-                    existingDevice.WallpaperBytes = Convert.FromBase64String(device.Avatar);
-                }
                 if (ipAddress is not null && !existingDevice.IpAddresses.Contains(ipAddress))
                 {
-                    List<string> updatedIpAddresses =
-                    [
-                        ..existingDevice.IpAddresses, ipAddress
-                    ];
-                    existingDevice.IpAddresses = updatedIpAddresses;
-                }
-
-                if (device.PhoneNumbers is not null && existingDevice.PhoneNumbers?.Count != device.PhoneNumbers.Count)
-                {
-                    existingDevice.PhoneNumbers = device.PhoneNumbers ?? [];
+                    existingDevice.IpAddresses = [.. existingDevice.IpAddresses, ipAddress];
                 }
 
                 repository.AddOrUpdateRemoteDevice(existingDevice);
-                
-                var pairedDevice = await App.MainWindow.DispatcherQueue.EnqueueAsync(() =>
-                    existingDevice.ToPairedDevice());
+
+                var pairedDevice = await App.MainWindow.DispatcherQueue.EnqueueAsync(() => existingDevice.ToPairedDevice());
                 return pairedDevice;
             }
 
-            // For new devices, show connection request dialog
             var tcs = new TaskCompletionSource<PairedDevice?>();
-            var localDevice = await GetLocalDeviceAsync();
-
-            var sharedSecret = EcdhHelper.DeriveKey(device.PublicKey!, localDevice.PrivateKey);
-
-            if (!EcdhHelper.VerifyProof(sharedSecret, device.Nonce!, device.Proof!)) { return null; }
-
             await App.MainWindow.DispatcherQueue.EnqueueAsync(async () =>
             {
                 try
                 {
                     var frame = (Frame)App.MainWindow.Content!;
-                    var dialog = new ConnectionRequestDialog(device.DeviceName, sharedSecret, frame)
+                    var dialog = new ConnectionRequestDialog(deviceName ?? deviceId, passkey, frame)
                     {
                         XamlRoot = App.MainWindow.Content!.XamlRoot
                     };
@@ -166,16 +149,15 @@ public partial class DeviceManager(ILogger<DeviceManager> logger, DeviceReposito
 
                     var newDevice = new RemoteDeviceEntity
                     {
-                        DeviceId = device.DeviceId,
-                        Name = device.DeviceName,
+                        DeviceId = deviceId,
+                        Name = deviceName ?? deviceId,
                         LastConnected = DateTime.Now,
-                        Model = device.Model!,
-                        SharedSecret = sharedSecret,
-                        WallpaperBytes = !string.IsNullOrEmpty(device.Avatar)
-                            ? Convert.FromBase64String(device.Avatar)
-                            : null,
+                        Model = string.Empty,
+                        SharedSecret = sharedSecretBytes,
+                        PublicKey = remotePublicKey,
+                        WallpaperBytes = null,
                         IpAddresses = ipAddress is not null ? [ipAddress] : [],
-                        PhoneNumbers = device.PhoneNumbers ?? []
+                        PhoneNumbers = [],
                     };
 
                     repository.AddOrUpdateRemoteDevice(newDevice);
@@ -200,20 +182,30 @@ public partial class DeviceManager(ILogger<DeviceManager> logger, DeviceReposito
     {
         try
         {
-            var localDevice =  repository.GetLocalDevice();
+            var localDevice = repository.GetLocalDevice();
             if (localDevice is null)
             {
                 var (name, _) = await UserInformation.GetCurrentUserInfoAsync();
-                var keyPair = EcdhHelper.GetKeyPair();
+                var publicKey = NotifyCryptoHelper.GeneratePublicKey();
                 localDevice = new LocalDeviceEntity
                 {
                     DeviceId = Guid.NewGuid().ToString(),
                     DeviceName = name,
-                    PublicKey = ((ECPublicKeyParameters)keyPair.Public).Q.GetEncoded(false),
-                    PrivateKey = ((ECPrivateKeyParameters)keyPair.Private).D.ToByteArrayUnsigned(),
+                    PublicKey = Encoding.UTF8.GetBytes(publicKey),
+                    PrivateKey = Array.Empty<byte>(),
                 };
 
                 repository.AddOrUpdateLocalDevice(localDevice);
+            }
+            else
+            {
+                var currentKey = Encoding.UTF8.GetString(localDevice.PublicKey ?? Array.Empty<byte>());
+                var normalizedKey = NotifyCryptoHelper.NormalizePublicKey(currentKey);
+                if (!string.Equals(currentKey, normalizedKey, StringComparison.Ordinal))
+                {
+                    localDevice.PublicKey = Encoding.UTF8.GetBytes(normalizedKey);
+                    repository.AddOrUpdateLocalDevice(localDevice);
+                }
             }
             return localDevice;
         }

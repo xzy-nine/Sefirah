@@ -25,48 +25,38 @@ public class DiscoveryService(
     private readonly DispatcherQueue dispatcher = DispatcherQueue.GetForCurrentThread();
     private const string DEFAULT_BROADCAST = "255.255.255.255";
     private LocalDeviceEntity? localDevice;
-    private readonly int port = 5149;
+    private readonly int port = 23334;
     public ObservableCollection<DiscoveredDevice> DiscoveredDevices { get; } = [];
     public List<DiscoveredMdnsServiceArgs> DiscoveredMdnsServices { get; } = [];
     private List<IPEndPoint> broadcastEndpoints = [];
-    private const int DiscoveryPort = 5149;
+    private const int DiscoveryPort = 23334;
+    private bool isBroadcasting;
 
     public async Task StartDiscoveryAsync()
     {
         try
         {
             localDevice = await deviceManager.GetLocalDeviceAsync();
-
-            var publicKey = Convert.ToBase64String(localDevice.PublicKey);
             var localAddresses = NetworkHelper.GetAllValidAddresses();
 
             logger.LogInformation($"Address to advertise: {string.Join(", ", localAddresses)}");
 
-            var (name, avatar) = await UserInformation.GetCurrentUserInfoAsync();
-            var udpBroadcast = new UdpBroadcast
-            {
-                DeviceId = localDevice.DeviceId,
-                IpAddresses = [.. localAddresses.Select(i => i.Address.ToString())],
-                Port = networkService.ServerPort,
-                DeviceName = name,
-                PublicKey = publicKey,
-            };
+            var (name, _) = await UserInformation.GetCurrentUserInfoAsync();
+            var encodedName = Convert.ToBase64String(Encoding.UTF8.GetBytes(name));
+            var serverPort = networkService.ServerPort == 0 ? 23333 : networkService.ServerPort;
+            var discoverMessage = $"NOTIFYRELAY_DISCOVER:{localDevice.DeviceId}:{encodedName}:{serverPort}";
 
-            mdnsService.AdvertiseService(udpBroadcast, port);
-            mdnsService.StartDiscovery();
             broadcastEndpoints = [.. localAddresses.Select(ipInfo =>
             {
                 var network = new Data.Models.IPNetwork(ipInfo.Address, ipInfo.SubnetMask);
                 var broadcastAddress = network.BroadcastAddress;
 
-                // Fallback to gateway if broadcast is limited
                 return broadcastAddress.Equals(IPAddress.Broadcast) && ipInfo.Gateway is not null
                     ? new IPEndPoint(ipInfo.Gateway, DiscoveryPort)
                     : new IPEndPoint(broadcastAddress, DiscoveryPort);
 
             }).Distinct()];
 
-            // Always include default broadcast as fallback
             broadcastEndpoints.Add(new IPEndPoint(IPAddress.Parse(DEFAULT_BROADCAST), DiscoveryPort));
 
             var ipAddresses = deviceManager.GetRemoteDeviceIpAddresses();
@@ -88,31 +78,33 @@ public class DiscoveryService(
                 udpClient.Socket.EnableBroadcast = true;
                 logger.LogInformation("UDP Client connected successfully {port}", port);
 
-                BroadcastDeviceInfoAsync(udpBroadcast);
+                BroadcastDeviceInfoAsync(discoverMessage);
             }
             else
             {
                 logger.LogError("Failed to connect UDP client");
             }
-
             mdnsService.DiscoveredMdnsService += OnDiscoveredMdnsService;
             mdnsService.ServiceInstanceShutdown += OnServiceInstanceShutdown;
 
         }
         catch (Exception ex)
         {
-            logger.LogError("Discovery initialization failed: {message}", ex.Message);
+            logger.LogError(ex, "Error starting discovery");
         }
     }
 
-    private async void BroadcastDeviceInfoAsync(UdpBroadcast udpBroadcast)
+    private async void BroadcastDeviceInfoAsync(string discoverMessage)
     {
+        if (isBroadcasting) return;
+        isBroadcasting = true;
+
+        var messageBytes = Encoding.UTF8.GetBytes(discoverMessage);
+
         while (udpClient is not null)
         {
-            udpBroadcast.TimeStamp = new DateTimeOffset(DateTime.UtcNow).ToUnixTimeMilliseconds();
-            string jsonMessage = SocketMessageSerializer.Serialize(udpBroadcast);
-            byte[] messageBytes = Encoding.UTF8.GetBytes(jsonMessage);
-            foreach (var endPoint in broadcastEndpoints)
+            var endpointsSnapshot = broadcastEndpoints.ToArray();
+            foreach (var endPoint in endpointsSnapshot)
             {
                 try
                 {
@@ -120,12 +112,21 @@ public class DiscoveryService(
                 }
                 catch
                 {
-                    // ignore
+                    // ignore send errors
                 }
             }
 
-            await Task.Delay(1000);
+            try
+            {
+                await Task.Delay(1000);
+            }
+            catch
+            {
+                break;
+            }
         }
+
+        isBroadcasting = false;
     }
 
     private async void OnDiscoveredMdnsService(object? sender, DiscoveredMdnsServiceArgs service)
@@ -136,14 +137,14 @@ public class DiscoveryService(
         
         logger.LogInformation("Discovered service instance: {deviceId}, {deviceName}", service.DeviceId, service.DeviceName);
 
-        var sharedSecret = EcdhHelper.DeriveKey(service.PublicKey, localDevice!.PrivateKey);
         DiscoveredDevice device = new(
             service.DeviceId,
-            service.PublicKey,
+            null,
             service.DeviceName,
-            sharedSecret,
+            null,
             DateTimeOffset.UtcNow,
-            DeviceOrigin.MdnsService);
+            DeviceOrigin.MdnsService,
+            23333);
 
         await dispatcher.EnqueueAsync(() =>
         {
@@ -196,40 +197,55 @@ public class DiscoveryService(
         try
         {
             var message = Encoding.UTF8.GetString(buffer, (int)offset, (int)size);
-            if (SocketMessageSerializer.DeserializeMessage(message) is not UdpBroadcast broadcast) return;
+            if (!message.StartsWith("NOTIFYRELAY_DISCOVER:")) return;
 
-            if (broadcast.DeviceId == localDevice?.DeviceId) return;
+            var parts = message.Split(':');
+            if (parts.Length < 4) return;
 
-            IPEndPoint? deviceEndpoint = broadcast.IpAddresses.Select(ip => new IPEndPoint(IPAddress.Parse(ip), DiscoveryPort)).FirstOrDefault();
+            var deviceId = parts[1];
+            if (deviceId == localDevice?.DeviceId) return;
 
-            if (deviceEndpoint is not null && !broadcastEndpoints.Contains(deviceEndpoint))
+            string decodedName;
+            try
             {
-                broadcastEndpoints.Add(deviceEndpoint);
+                decodedName = Encoding.UTF8.GetString(Convert.FromBase64String(parts[2]));
+            }
+            catch
+            {
+                decodedName = parts[2];
             }
 
-            // Skip if we already have this device via mDNS
-            if (DiscoveredMdnsServices.Any(s => s.PublicKey == broadcast.PublicKey)) return;
+            int devicePort = int.TryParse(parts[3], out var parsedPort) ? parsedPort : 23333;
 
-            var sharedSecret = EcdhHelper.DeriveKey(broadcast.PublicKey, localDevice!.PrivateKey);
-            DiscoveredDevice device = new(
-                broadcast.DeviceId,
-                broadcast.PublicKey,
-                broadcast.DeviceName,
-                sharedSecret,
-                DateTimeOffset.FromUnixTimeMilliseconds(broadcast.TimeStamp),
-                DeviceOrigin.UdpBroadcast);
+            if (endpoint is IPEndPoint ipEndPoint)
+            {
+                var newEndpoint = new IPEndPoint(ipEndPoint.Address, DiscoveryPort);
+                if (!broadcastEndpoints.Contains(newEndpoint))
+                {
+                    broadcastEndpoints.Add(newEndpoint);
+                }
+            }
+
+            var discovered = new DiscoveredDevice(
+                deviceId,
+                null,
+                decodedName,
+                null,
+                DateTimeOffset.UtcNow,
+                DeviceOrigin.UdpBroadcast,
+                devicePort);
 
             await dispatcher.EnqueueAsync(() =>
             {
-                var existingDevice = DiscoveredDevices.FirstOrDefault(d => d.DeviceId == device.DeviceId);
+                var existingDevice = DiscoveredDevices.FirstOrDefault(d => d.DeviceId == discovered.DeviceId);
                 if (existingDevice is not null)
                 {
                     var index = DiscoveredDevices.IndexOf(existingDevice);
-                    DiscoveredDevices[index] = device;
+                    DiscoveredDevices[index] = discovered;
                 }
                 else
                 {
-                    DiscoveredDevices.Add(device);
+                    DiscoveredDevices.Add(discovered);
                 }
             });
 
@@ -251,7 +267,7 @@ public class DiscoveryService(
             if (_cleanupTimer is not null) return;
 
             _cleanupTimer = dispatcher.CreateTimer();
-            _cleanupTimer.Interval = TimeSpan.FromMilliseconds(250);
+            _cleanupTimer.Interval = TimeSpan.FromSeconds(1);
             _cleanupTimer.Tick += (s, e) => CleanupStaleDevices();
             _cleanupTimer.Start();
         }
@@ -273,7 +289,7 @@ public class DiscoveryService(
             await dispatcher.EnqueueAsync(() =>
             {
                 var now = DateTimeOffset.UtcNow;
-                var staleThreshold = TimeSpan.FromMilliseconds(500);
+                var staleThreshold = TimeSpan.FromSeconds(5);
 
                 var staleDevices = DiscoveredDevices
                     .Where(d => d.Origin is DeviceOrigin.UdpBroadcast &&

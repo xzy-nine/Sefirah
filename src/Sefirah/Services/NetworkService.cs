@@ -1,8 +1,9 @@
+using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
-using System.Security.Authentication;
-using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using System.Threading;
 using CommunityToolkit.WinUI;
 using NetCoreServer;
 using Sefirah.Data.Contracts;
@@ -21,14 +22,14 @@ public class NetworkService(
     IAdbService adbService) : INetworkService, ISessionManager, ITcpServerProvider
 {
     private Server? server;
-    public int ServerPort { get; private set; }
+    public int ServerPort { get; private set; } = 23333;
     private bool isRunning;
-    private X509Certificate2? certificate;
-    private readonly IEnumerable<int> PORT_RANGE = Enumerable.Range(5150, 20); // 5150 to 5169
 
     private readonly Lazy<IMessageHandler> messageHandler = new(messageHandlerFactory);
-
-    private string bufferedData = string.Empty;
+    private readonly Dictionary<Guid, string> sessionBuffers = new();
+    private string? localPublicKey;
+    private string? localDeviceId;
+    private Timer? heartbeatTimer;
     
     private ObservableCollection<PairedDevice> PairedDevices => deviceManager.PairedDevices;
 
@@ -46,40 +47,25 @@ public class NetworkService(
         }
         try
         {
+            var localDevice = await deviceManager.GetLocalDeviceAsync();
+            localPublicKey = Encoding.UTF8.GetString(localDevice.PublicKey ?? Array.Empty<byte>());
+            localDeviceId = localDevice.DeviceId;
 
-            certificate = await CertificateHelper.GetOrCreateCertificateAsync();
-
-            var context = new SslContext(SslProtocols.Tls12 | SslProtocols.Tls13, certificate, (sender, cert, chain, errors) => true);
-
-            foreach (int port in PORT_RANGE)
+            server = new Server(IPAddress.Any, ServerPort, this, logger)
             {
-                try
-                {
-                    server = new Server(context, IPAddress.Any, port, this, logger)
-                    {
-                        OptionReuseAddress = true,
-                    };
+                OptionReuseAddress = true,
+            };
 
-                    if (server.Start())
-                    {
-                        ServerPort = port;
-                        isRunning = true;
-                        logger.Info($"Server started on port: {port}");
-                        return true;
-                    }
-                    else
-                    {
-                        server.Dispose();
-                        server = null;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    logger.Error($"Error starting server on port {port}", ex);
-                    server?.Dispose();
-                    server = null;
-                }
+            if (server.Start())
+            {
+                isRunning = true;
+                logger.Info($"Server started on port: {ServerPort}");
+                StartHeartbeat();
+                return true;
             }
+
+            server.Dispose();
+            server = null;
 
             logger.LogError("Failed to start server");
             return false;
@@ -95,8 +81,22 @@ public class NetworkService(
     {
         try
         {
-            string messageWithNewline = message + "\n";
-            byte[] messageBytes = Encoding.UTF8.GetBytes(messageWithNewline);
+            var device = PairedDevices.FirstOrDefault(d => d.Session?.Id == session.Id);
+            if (device?.SharedSecret is null)
+            {
+                logger.LogWarning("Cannot send encrypted message, shared secret missing for session {id}", session.Id);
+                return;
+            }
+
+            if (localPublicKey is null || localDeviceId is null)
+            {
+                logger.LogWarning("Local identity not initialized, skip sending");
+                return;
+            }
+
+            var encryptedPayload = NotifyCryptoHelper.Encrypt(message, device.SharedSecret);
+            var framedMessage = $"DATA_JSON:{localDeviceId}:{localPublicKey}:{encryptedPayload}\n";
+            byte[] messageBytes = Encoding.UTF8.GetBytes(framedMessage);
 
             session.Send(messageBytes, 0, messageBytes.Length);
         }
@@ -122,6 +122,20 @@ public class NetworkService(
         }
     }
 
+    private void SendRaw(ServerSession session, string message)
+    {
+        try
+        {
+            string messageWithNewline = message + "\n";
+            byte[] messageBytes = Encoding.UTF8.GetBytes(messageWithNewline);
+            session.Send(messageBytes, 0, messageBytes.Length);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError("Error sending raw message {ex}", ex);
+        }
+    }
+
     // Server side methods
     public void OnConnected(ServerSession session)
     {
@@ -144,7 +158,10 @@ public class NetworkService(
         {
             string newData = Encoding.UTF8.GetString(buffer, (int)offset, (int)size);
 
-            logger.Debug($"Processing message: {(newData.Length > 100 ? string.Concat(newData.AsSpan(0, Math.Min(100, newData.Length)), "...") : newData)}");
+            if (!sessionBuffers.TryGetValue(session.Id, out var bufferedData))
+            {
+                bufferedData = string.Empty;
+            }
 
             bufferedData += newData;
             while (true)
@@ -157,26 +174,24 @@ public class NetworkService(
 
                 string message = bufferedData[..newlineIndex].Trim();
 
-                // Check if newlineIndex is at the end of the string
-                if (newlineIndex + 1 >= bufferedData.Length)
-                {
-                    bufferedData = string.Empty;
-                }
-                else
-                {
-                    bufferedData = bufferedData[(newlineIndex + 1)..];
-                }
+                bufferedData = newlineIndex + 1 >= bufferedData.Length
+                    ? string.Empty
+                    : bufferedData[(newlineIndex + 1)..];
 
                 if (string.IsNullOrEmpty(message)) continue;
-        
+
                 var device = PairedDevices.FirstOrDefault(d => d.Session?.Id == session.Id);
                 if (device is null)
                 {
-                    await HandleVerification(session, message);
-                    return;
+                    await HandleHandshakeAsync(session, message);
                 }
-                ProcessMessage(device, message);
+                else
+                {
+                    await ProcessProtocolMessageAsync(device, message);
+                }
             }
+
+            sessionBuffers[session.Id] = bufferedData;
         }
         catch (Exception ex)
         {
@@ -185,97 +200,119 @@ public class NetworkService(
         }
     }
 
-    private async Task HandleVerification(ServerSession session, string message)
+    private async Task HandleHandshakeAsync(ServerSession session, string message)
     {
-        try
+        if (!message.StartsWith("HANDSHAKE:"))
         {
-            if (SocketMessageSerializer.DeserializeMessage(message) is not DeviceInfo deviceInfo)
-            {
-                logger.Warn("Invalid device info or first message wasn't deviceInfo");
-                DisconnectSession(session);
-                return;
-            }
-
-
-            if (string.IsNullOrEmpty(deviceInfo.Nonce) || string.IsNullOrEmpty(deviceInfo.Proof))
-            {
-                logger.Warn("Missing authentication data");
-                DisconnectSession(session);
-                return;
-            }
-
-            var connectedSessionIpAddress = session.Socket.RemoteEndPoint?.ToString()?.Split(':')[0];
-            logger.Info($"Received connection from {connectedSessionIpAddress}");
-
-            var device = await deviceManager.VerifyDevice(deviceInfo, connectedSessionIpAddress);
-
-            if (device is not null)
-            {
-                logger.Info($"Device {device.Id} connected");
-                
-                deviceManager.UpdateOrAddDevice(device, connectedDevice  =>
-                {
-
-                    connectedDevice.ConnectionStatus = true;
-                    connectedDevice.Session = session;
-                    
-                    deviceManager.ActiveDevice = connectedDevice;
-                    device = connectedDevice;
-
-                    if (device.DeviceSettings.AdbAutoConnect && !string.IsNullOrEmpty(connectedSessionIpAddress))
-                    {
-                        adbService.TryConnectTcp(connectedSessionIpAddress);
-                    }
-                });
-
-                var (_, avatar) = await UserInformation.GetCurrentUserInfoAsync();
-                var localDevice = await deviceManager.GetLocalDeviceAsync();
-
-                // Generate our authentication proof
-                var sharedSecret = EcdhHelper.DeriveKey(deviceInfo.PublicKey!, localDevice.PrivateKey);
-                var nonce = EcdhHelper.GenerateNonce();
-                var proof = EcdhHelper.GenerateProof(sharedSecret, nonce);
-
-                SendMessage(session, SocketMessageSerializer.Serialize(new DeviceInfo
-                {
-                    DeviceId = localDevice.DeviceId,
-                    DeviceName = localDevice.DeviceName,
-                    Avatar = avatar,
-                    PublicKey = Convert.ToBase64String(localDevice.PublicKey),
-                    Nonce = nonce,
-                    Proof = proof
-                }));
-
-                ConnectionStatusChanged?.Invoke(this, (device, true));
-            }
-            else
-            {
-                SendMessage(session, "Rejected");
-                await Task.Delay(50);
-                logger.Info("Device verification failed or was declined");
-                DisconnectSession(session);
-            }
+            logger.LogWarning("Unexpected pre-handshake message from {id}: {message}", session.Id, message);
+            // 非握手报文不处理，等待合法握手再次到来
+            return;
         }
-        catch (Exception ex)
+
+        var parts = message.Split(':');
+        if (parts.Length < 3)
         {
-            logger.Error($"Error processing first message for session {session.Id}: {ex}");
+            logger.LogWarning("Invalid handshake format");
+            SendRaw(session, $"REJECT:{localDeviceId ?? string.Empty}");
+            DisconnectSession(session);
+            return;
+        }
+
+        var remoteDeviceId = parts[1];
+        var remotePublicKey = parts[2];
+        var connectedSessionIpAddress = session.Socket.RemoteEndPoint?.ToString()?.Split(':')[0];
+        logger.Info($"Received handshake from {connectedSessionIpAddress}");
+
+        var device = await deviceManager.VerifyHandshakeAsync(remoteDeviceId, remotePublicKey, null, connectedSessionIpAddress);
+
+        if (device is not null)
+        {
+            logger.Info($"Device {device.Id} connected");
+
+            deviceManager.UpdateOrAddDevice(device, connectedDevice  =>
+            {
+                connectedDevice.ConnectionStatus = true;
+                connectedDevice.Session = session;
+                connectedDevice.RemotePublicKey = remotePublicKey;
+                connectedDevice.SharedSecret ??= NotifyCryptoHelper.GenerateSharedSecretBytes(localPublicKey ?? string.Empty, remotePublicKey);
+                deviceManager.ActiveDevice = connectedDevice;
+                device = connectedDevice;
+
+                if (device.DeviceSettings.AdbAutoConnect && !string.IsNullOrEmpty(connectedSessionIpAddress))
+                {
+                    adbService.TryConnectTcp(connectedSessionIpAddress);
+                }
+            });
+
+            if (localDeviceId is not null && localPublicKey is not null)
+            {
+                SendRaw(session, $"ACCEPT:{localDeviceId}:{localPublicKey}");
+            }
+
+            ConnectionStatusChanged?.Invoke(this, (device, true));
+        }
+        else
+        {
+            SendRaw(session, $"REJECT:{localDeviceId ?? string.Empty}");
+            await Task.Delay(50);
+            logger.Info("Device verification failed or was declined");
             DisconnectSession(session);
         }
     }
 
-    private async void ProcessMessage(PairedDevice device, string message)
+    private async Task ProcessProtocolMessageAsync(PairedDevice device, string message)
     {
         try
         {
-            // Check if this looks like a JSON message before attempting to deserialize
-            if (message.TrimStart().StartsWith('{') || message.TrimStart().StartsWith('['))
+            if (message.StartsWith("HEARTBEAT:"))
             {
-                var socketMessage = SocketMessageSerializer.DeserializeMessage(message);
-                if (socketMessage is null) return;
-                await messageHandler.Value.HandleMessageAsync(device, socketMessage);
+                device.ConnectionStatus = true;
                 return;
             }
-            logger.Debug("Received non-JSON data, skipping JSON parsing");
+
+            if (message.StartsWith("DATA_"))
+            {
+                var parts = message.Split(':');
+                if (parts.Length < 4)
+                {
+                    logger.LogWarning("Invalid DATA frame");
+                    return;
+                }
+
+                if (device.SharedSecret is null)
+                {
+                    logger.LogWarning("Shared secret missing for device {id}", device.Id);
+                    return;
+                }
+
+                var encryptedPayload = string.Join(":", parts.Skip(3));
+                var decryptedPayload = NotifyCryptoHelper.Decrypt(encryptedPayload, device.SharedSecret);
+
+                await DispatchPayloadAsync(device, decryptedPayload);
+                return;
+            }
+
+            if (message.TrimStart().StartsWith('{') || message.TrimStart().StartsWith('['))
+            {
+                await DispatchPayloadAsync(device, message);
+                return;
+            }
+
+            logger.Debug("Received unsupported message format");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error handling protocol message");
+        }
+    }
+
+    private async Task DispatchPayloadAsync(PairedDevice device, string payload)
+    {
+        try
+        {
+            var socketMessage = SocketMessageSerializer.DeserializeMessage(payload);
+            if (socketMessage is null) return;
+            await messageHandler.Value.HandleMessageAsync(device, socketMessage);
         }
         catch (JsonException jsonEx)
         {
@@ -287,7 +324,7 @@ public class NetworkService(
     {
         try
         {
-            bufferedData = string.Empty;
+            sessionBuffers.Remove(session.Id);
             session.Disconnect();
             session.Dispose();
             var device = PairedDevices.FirstOrDefault(d => d.Session == session);   
@@ -304,6 +341,47 @@ public class NetworkService(
         catch (Exception ex)
         {
             logger.Error($"Error in Disconnecting: {ex.Message}");
+        }
+    }
+
+    private void StartHeartbeat()
+    {
+        heartbeatTimer ??= new Timer(_ => SendHeartbeat(), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(5));
+    }
+
+    private void SendHeartbeat()
+    {
+        try
+        {
+            if (localDeviceId is null || localPublicKey is null) return;
+
+            var payload = $"HEARTBEAT:{localDeviceId}:{localPublicKey}\n";
+            var bytes = Encoding.UTF8.GetBytes(payload);
+
+            List<ServerSession> sessions;
+            lock (PairedDevices)
+            {
+                sessions = PairedDevices
+                    .Where(d => d.Session is not null)
+                    .Select(d => d.Session!)
+                    .ToList();
+            }
+
+            foreach (var session in sessions)
+            {
+                try
+                {
+                    session.Send(bytes, 0, bytes.Length);
+                }
+                catch
+                {
+                    // Ignore transient send errors
+                }
+            }
+        }
+        catch
+        {
+            // best-effort heartbeat
         }
     }
 }

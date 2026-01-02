@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.Sockets;
-using System.Security.Authentication;
 using System.Text;
 using NetCoreServer;
 using Sefirah.Data.Contracts;
@@ -70,14 +69,7 @@ public class FileTransferService(
 
             cancellationTokenSource = new CancellationTokenSource();
 
-            var certificate = await CertificateHelper.GetOrCreateCertificateAsync();
-            var context = new SslContext(
-                SslProtocols.Tls12 | SslProtocols.Tls13,
-                certificate,
-                (sender, cert, chain, errors) => true
-            );
-
-            client = new Client(context, serverInfo.IpAddress, serverInfo.Port, this);
+            client = new Client(serverInfo.IpAddress, serverInfo.Port, this);
 
             if (!client.ConnectAsync()) 
                 throw new IOException("Failed to connect to file transfer server");
@@ -191,16 +183,7 @@ public class FileTransferService(
 
             currentFileStream = new FileStream(fullPath, FileMode.Create);
 
-            var context = new SslContext(
-                SslProtocols.Tls12 | SslProtocols.Tls13,
-                await CertificateHelper.GetOrCreateCertificateAsync(),
-                (sender, cert, chain, errors) => true
-            )
-            {
-                ClientCertificateRequired = false,
-            };
-
-            client = new Client(context, serverInfo.IpAddress, serverInfo.Port, this);
+            client = new Client(serverInfo.IpAddress, serverInfo.Port, this);
             if (!client.ConnectAsync())
                 throw new IOException("Failed to connect to file transfer server");
 
@@ -585,18 +568,12 @@ public class FileTransferService(
 
     public async Task<ServerInfo> InitializeServer()
     {
-        var certificate = await CertificateHelper.GetOrCreateCertificateAsync();
-        var context = new SslContext(SslProtocols.Tls12 | SslProtocols.Tls13, certificate, (sender, cert, chain, errors) => true)
-        {
-            ClientCertificateRequired = false,
-        };
-
         // Try each port in the range
         foreach (int port in PORT_RANGE)
         {
             try
             {
-                server = new Server(context, IPAddress.Any, port, this, logger)
+                server = new Server(IPAddress.Any, port, this, logger)
                 {
                     OptionDualMode = true,
                     OptionReuseAddress = true,

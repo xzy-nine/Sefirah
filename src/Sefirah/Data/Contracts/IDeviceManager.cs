@@ -54,7 +54,7 @@ public interface IDeviceManager
     /// <summary>
     /// Returns the device if it get's successfully verified and added to the database.
     /// </summary>
-    Task<PairedDevice?> VerifyDevice(DeviceInfo device, string? ipAddress);
+    Task<PairedDevice?> VerifyHandshakeAsync(string deviceId, string remotePublicKey, string? deviceName, string? ipAddress);
 
     /// <summary>
     /// Gets the local device.

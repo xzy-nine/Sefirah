@@ -1,11 +1,13 @@
 using NetCoreServer;
 using System.Net;
-using System.Net.Sockets;
+using SocketError = System.Net.Sockets.SocketError;
 using UdpClient = NetCoreServer.UdpClient;
+using TcpClient = NetCoreServer.TcpClient;
+using TcpServer = NetCoreServer.TcpServer;
 
 namespace Sefirah.Services.Socket;
 
-public partial class ServerSession(SslServer server, ITcpServerProvider socketProvider) : SslSession(server)
+public partial class ServerSession(TcpServer server, ITcpServerProvider socketProvider) : TcpSession(server)
 {
 
     protected override void OnDisconnected()
@@ -29,9 +31,9 @@ public partial class ServerSession(SslServer server, ITcpServerProvider socketPr
     }
 }
 
-public partial class Server(SslContext context, IPAddress address, int port, ITcpServerProvider socketProvider, ILogger logger) : SslServer(context, address, port)
+public partial class Server(IPAddress address, int port, ITcpServerProvider socketProvider, ILogger logger) : TcpServer(address, port)
 {
-    protected override SslSession CreateSession()
+    protected override TcpSession CreateSession()
     {
         logger.LogDebug("Creating new session");
         return new ServerSession(this, socketProvider);
@@ -43,7 +45,7 @@ public partial class Server(SslContext context, IPAddress address, int port, ITc
     }
 }
 
-public partial class Client(SslContext context, string address, int port, ITcpClientProvider socketProvider) : SslClient(context, address, port)
+public partial class Client(string address, int port, ITcpClientProvider socketProvider) : TcpClient(address, port)
 {
     protected override void OnConnected()
     {
