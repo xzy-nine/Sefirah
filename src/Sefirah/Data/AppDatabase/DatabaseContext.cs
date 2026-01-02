@@ -91,6 +91,11 @@ public class DatabaseContext
             db.CreateTable<AttachmentEntity>();
         }
 
+        if (db.GetTableInfo(nameof(NotificationEntity)).Count == 0)
+        {
+            db.CreateTable<NotificationEntity>();
+        }
+
         return db;
     }
 }

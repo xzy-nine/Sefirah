@@ -1,12 +1,15 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using CommunityToolkit.Mvvm.DependencyInjection;
 using CommunityToolkit.WinUI;
 using NetCoreServer;
+using Sefirah.Data.Enums;
 using Sefirah.Data.Contracts;
 using Sefirah.Data.Models;
 using Sefirah.Helpers;
@@ -84,10 +87,39 @@ public class NetworkService(
     {
         try
         {
-            var device = PairedDevices.FirstOrDefault(d => d.Session?.Id == session.Id);
+            if (session is null)
+            {
+                logger.LogDebug("Skip send: session is null");
+                return;
+            }
+
+            if (deviceManager.PairedDevices is null)
+            {
+                logger.LogWarning("Cannot send message, paired devices list not initialized");
+                return;
+            }
+
+            PairedDevice? device = null;
+            try
+            {
+                foreach (var d in deviceManager.PairedDevices)
+                {
+                    if (d?.Session is null) continue;
+                    if (session.Id == d.Session.Id)
+                    {
+                        device = d;
+                        break;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error scanning paired devices for session");
+                return;
+            }
             if (device is null)
             {
-                logger.LogWarning("Cannot send message, no paired device for session {id}", session.Id);
+                logger.LogDebug("Skip send: no paired device for session {id}", session.Id);
                 return;
             }
 
@@ -103,11 +135,18 @@ public class NetworkService(
                 return;
             }
 
-            var encryptedPayload = NotifyCryptoHelper.Encrypt(message, device.SharedSecret);
-            var framedMessage = $"DATA_JSON:{localDeviceId}:{localPublicKey}:{encryptedPayload}\n";
-            byte[] messageBytes = Encoding.UTF8.GetBytes(framedMessage);
+            if (session.Socket is not null && session.Socket.Connected)
+            {
+                var encryptedPayload = NotifyCryptoHelper.Encrypt(message, device.SharedSecret);
+                var framedMessage = $"DATA_JSON:{localDeviceId}:{localPublicKey}:{encryptedPayload}\n";
+                byte[] messageBytes = Encoding.UTF8.GetBytes(framedMessage);
 
-            session.Send(messageBytes, 0, messageBytes.Length);
+                session.Send(messageBytes, 0, messageBytes.Length);
+            }
+            else
+            {
+                logger.LogDebug("Skip send: session not connected for device {id}", device.Id);
+            }
         }
         catch (Exception ex)
         {
@@ -153,7 +192,7 @@ public class NetworkService(
 
     public void OnDisconnected(ServerSession session)
     {
-        DisconnectSession(session);
+        DetachSession(session);
     }
 
     public void OnError(SocketError error)
@@ -213,6 +252,16 @@ public class NetworkService(
     {
         if (!message.StartsWith("HANDSHAKE:"))
         {
+            if (message.StartsWith("DATA_") || message.StartsWith("HEARTBEAT:"))
+            {
+                var attachedDevice = await TryAttachExistingDeviceSessionAsync(session, message);
+                if (attachedDevice is not null)
+                {
+                    await ProcessProtocolMessageAsync(attachedDevice, message);
+                    return;
+                }
+            }
+
             logger.LogWarning("Unexpected pre-handshake message from {id}: {message}", session.Id, message);
             // 非握手报文不处理，等待合法握手再次到来
             return;
@@ -305,6 +354,7 @@ public class NetworkService(
 
                 var encryptedPayload = string.Join(":", parts.Skip(3));
                 var decryptedPayload = NotifyCryptoHelper.Decrypt(encryptedPayload, device.SharedSecret);
+                logger.LogDebug("Received DATA payload len={len} for device {id}", decryptedPayload.Length, device.Id);
 
                 MarkDeviceAlive(device);
                 await DispatchPayloadAsync(device, decryptedPayload);
@@ -326,17 +376,123 @@ public class NetworkService(
         }
     }
 
+    private async Task<PairedDevice?> TryAttachExistingDeviceSessionAsync(ServerSession session, string message)
+    {
+        try
+        {
+            var parts = message.Split(':');
+            if (parts.Length < 3) return null;
+
+            var remoteDeviceId = parts[1];
+            var remotePublicKey = parts[2];
+
+            var device = PairedDevices.FirstOrDefault(d => d.Id == remoteDeviceId);
+            if (device is null) return null;
+
+            if (device.RemotePublicKey is not null && !string.Equals(device.RemotePublicKey, remotePublicKey, StringComparison.Ordinal))
+            {
+                logger.LogWarning("Remote public key mismatch for device {id}", remoteDeviceId);
+                return null;
+            }
+
+            if (localPublicKey is null)
+            {
+                logger.LogWarning("Local public key not initialized, cannot attach session");
+                return null;
+            }
+
+            await App.MainWindow.DispatcherQueue.EnqueueAsync(() =>
+            {
+                device.Session = session;
+                device.ConnectionStatus = true;
+                device.RemotePublicKey = remotePublicKey;
+                device.SharedSecret ??= NotifyCryptoHelper.GenerateSharedSecretBytes(localPublicKey, remotePublicKey);
+                device.LastHeartbeat = DateTime.UtcNow;
+                deviceManager.ActiveDevice ??= device;
+            });
+
+            ConnectionStatusChanged?.Invoke(this, (device, true));
+            return device;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error attaching pre-handshake DATA session");
+            return null;
+        }
+    }
+
     private async Task DispatchPayloadAsync(PairedDevice device, string payload)
     {
         try
         {
             var socketMessage = SocketMessageSerializer.DeserializeMessage(payload);
-            if (socketMessage is null) return;
-            await messageHandler.Value.HandleMessageAsync(device, socketMessage);
+            if (socketMessage is not null && socketMessage is not SocketMessage)
+            {
+                await messageHandler.Value.HandleMessageAsync(device, socketMessage);
+                return;
+            }
+
+            if (TryParseNotifyRelayNotification(payload, out var notificationMessage))
+            {
+                await messageHandler.Value.HandleMessageAsync(device, notificationMessage);
+                return;
+            }
         }
         catch (JsonException jsonEx)
         {
             logger.Error($"Error parsing JSON message: {jsonEx.Message}");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error dispatching payload");
+        }
+    }
+
+    private bool TryParseNotifyRelayNotification(string payload, out NotificationMessage notificationMessage)
+    {
+        notificationMessage = null!;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            if (doc.RootElement.ValueKind is not JsonValueKind.Object) return false;
+
+            var root = doc.RootElement;
+
+            if (!root.TryGetProperty("packageName", out var packageProp)) return false;
+
+            var packageName = packageProp.GetString();
+            if (string.IsNullOrWhiteSpace(packageName)) return false;
+
+            var timeMs = root.TryGetProperty("time", out var timeProp)
+                ? timeProp.GetInt64()
+                : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+            string notificationKey = root.TryGetProperty("id", out var idProp) && !string.IsNullOrWhiteSpace(idProp.GetString())
+                ? idProp.GetString()!
+                : root.TryGetProperty("key", out var keyProp) && !string.IsNullOrWhiteSpace(keyProp.GetString())
+                    ? keyProp.GetString()!
+                    : $"{packageName}:{timeMs}";
+
+            notificationMessage = new NotificationMessage
+            {
+                NotificationKey = notificationKey,
+                TimeStamp = timeMs.ToString(),
+                NotificationType = NotificationType.New,
+                AppPackage = packageName,
+                AppName = root.TryGetProperty("appName", out var appNameProp) ? appNameProp.GetString() : null,
+                Title = root.TryGetProperty("title", out var titleProp) ? titleProp.GetString() : null,
+                Text = root.TryGetProperty("text", out var textProp) ? textProp.GetString() : null,
+                AppIcon = root.TryGetProperty("appIcon", out var appIconProp) ? appIconProp.GetString() : null,
+                LargeIcon = root.TryGetProperty("largeIcon", out var largeIconProp) ? largeIconProp.GetString() : null
+            };
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Failed to parse Notify-Relay notification payload");
+            return false;
         }
     }
 
@@ -347,25 +503,24 @@ public class NetworkService(
             sessionBuffers.Remove(session.Id);
             session.Disconnect();
             session.Dispose();
-            var device = PairedDevices.FirstOrDefault(d => d.Session == session);   
-            if (device is not null)
-            {
-                App.MainWindow.DispatcherQueue.EnqueueAsync(() =>
-                {
-                    if (device.ConnectionStatus)
-                    {
-                        device.ConnectionStatus = false;
-                        ConnectionStatusChanged?.Invoke(this, (device, false));
-                    }
-                    device.Session = null;
-                    logger.Info($"Device {device.Name} session disconnected, status updated");
-                });
-            }
+            DetachSession(session);
         }
         catch (Exception ex)
         {
             logger.Error($"Error in Disconnecting: {ex.Message}");
         }
+    }
+
+    private void DetachSession(ServerSession session)
+    {
+        var device = PairedDevices.FirstOrDefault(d => d.Session == session);
+        if (device is null) return;
+
+        App.MainWindow.DispatcherQueue.EnqueueAsync(() =>
+        {
+            device.Session = null;
+            logger.LogDebug($"Session detached for device {device.Name}");
+        });
     }
 
     private void MarkDeviceAlive(PairedDevice device)
@@ -394,6 +549,7 @@ public class NetworkService(
 
             foreach (var device in PairedDevices.ToList())
             {
+                // 发送心跳（如果当前有持久连接）
                 if (device.Session is not null)
                 {
                     try
@@ -402,13 +558,20 @@ public class NetworkService(
                     }
                     catch
                     {
-                        // Ignore transient send errors
+                        // best-effort heartbeat send
                     }
                 }
 
-                if (device.Session is not null && device.LastHeartbeat.HasValue && DateTime.UtcNow - device.LastHeartbeat > heartbeatTimeout)
+                // 超时判定：无论是否有会话，只要超过超时时间就标记离线
+                var last = device.LastHeartbeat;
+                if (last.HasValue && DateTime.UtcNow - last.Value > heartbeatTimeout && device.ConnectionStatus)
                 {
-                    DisconnectSession(device.Session!);
+                    App.MainWindow.DispatcherQueue.EnqueueAsync(() =>
+                    {
+                        device.ConnectionStatus = false;
+                        device.Session = null;
+                        ConnectionStatusChanged?.Invoke(this, (device, false));
+                    });
                 }
             }
         }

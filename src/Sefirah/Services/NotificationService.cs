@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.WinUI;
 using Sefirah.Data.AppDatabase.Repository;
 using Sefirah.Data.Contracts;
@@ -15,12 +16,14 @@ public class NotificationService(
     ISessionManager sessionManager,
     IDeviceManager deviceManager,
     IPlatformNotificationHandler platformNotificationHandler,
-    RemoteAppRepository remoteAppsRepository) : INotificationService
+    RemoteAppRepository remoteAppsRepository,
+    NotificationRepository notificationRepository) : INotificationService
 {
     private readonly Dictionary<string, ObservableCollection<Notification>> deviceNotifications = [];
     private readonly Microsoft.UI.Dispatching.DispatcherQueue dispatcher = App.MainWindow.DispatcherQueue;
     
     private readonly ObservableCollection<Notification> activeNotifications = [];
+    private readonly HashSet<string> loadedDeviceIds = [];
 
     /// <summary>
     /// Gets notifications for the currently active device session
@@ -37,8 +40,16 @@ public class NotificationService(
         ((INotifyPropertyChanged)deviceManager).PropertyChanged += (s, e) =>
         {
             if (e.PropertyName is nameof(IDeviceManager.ActiveDevice) && deviceManager.ActiveDevice is not null)
+            {
+                _ = EnsureNotificationsLoadedAsync(deviceManager.ActiveDevice);
                 UpdateActiveNotifications(deviceManager.ActiveDevice);
+            }
         };
+
+        if (deviceManager.ActiveDevice is not null)
+        {
+            _ = EnsureNotificationsLoadedAsync(deviceManager.ActiveDevice);
+        }
     }
 
     /// <summary>
@@ -58,7 +69,7 @@ public class NotificationService(
     {
         if (e.IsConnected)
         {
-            ClearHistory(e.Device);
+            _ = EnsureNotificationsLoadedAsync(e.Device);
         }
     }
 
@@ -78,6 +89,7 @@ public class NotificationService(
 
                 await dispatcher.EnqueueAsync(async () =>
                 {
+                    await EnsureNotificationsLoadedAsync(device);
                     var notifications = GetOrCreateNotificationCollection(device);
                     var notification = await Notification.FromMessage(message);
                     
@@ -116,6 +128,8 @@ public class NotificationService(
                     {
                         return;
                     }
+
+                    notificationRepository.UpsertNotification(device.Id, message, notification.Pinned);
                     
                     SortNotifications(device.Id);
                     
@@ -133,6 +147,7 @@ public class NotificationService(
                 if (notification is not null && !notification.Pinned)
                 {
                     await dispatcher.EnqueueAsync(() => notifications.Remove(notification));
+                    notificationRepository.DeleteNotification(device.Id, message.NotificationKey);
                     // Update active notifications if this is for the active device
                     if (deviceManager.ActiveDevice?.Id == device.Id)
                     {
@@ -157,6 +172,8 @@ public class NotificationService(
             {
                 dispatcher.EnqueueAsync(() => notifications.Remove(notification));
                 logger.LogDebug("Removed notification with key: {NotificationKey} from device {DeviceId}", notification, device.Id);
+
+                notificationRepository.DeleteNotification(device.Id, notification.Key);
 
                 platformNotificationHandler.RemoveNotificationsByTagAndGroup(notification.Tag, notification.GroupKey);
 
@@ -197,6 +214,7 @@ public class NotificationService(
             var index = notifications.IndexOf(notification);
             notifications[index] = notification;
             SortNotifications(activeDevice.Id);
+            notificationRepository.UpdatePinned(activeDevice.Id, notification.Key, notification.Pinned);
                 
             // Update active notifications since this is for the active device
             UpdateActiveNotifications(activeDevice);
@@ -210,6 +228,7 @@ public class NotificationService(
         {
             ClearHistory(activeDevice);
             activeNotifications.Clear();
+            notificationRepository.ClearDeviceNotifications(activeDevice.Id);
             if (activeDevice.Session is null) return;
 
             var command = new CommandMessage { CommandType = CommandType.ClearNotifications };
@@ -234,6 +253,7 @@ public class NotificationService(
                     notifications.Clear();
                     ClearBadge();
                 }
+                notificationRepository.ClearDeviceNotifications(device.Id);
             }
             catch (Exception ex)
             {
@@ -326,6 +346,46 @@ public class NotificationService(
 
             }
         });
+    }
+
+    private async Task EnsureNotificationsLoadedAsync(PairedDevice device)
+    {
+        if (loadedDeviceIds.Contains(device.Id)) return;
+
+        try
+        {
+            var stored = notificationRepository.GetDeviceNotifications(device.Id);
+            if (stored.Count == 0)
+            {
+                loadedDeviceIds.Add(device.Id);
+                return;
+            }
+
+            var notifications = new ObservableCollection<Notification>();
+
+            foreach (var entity in stored)
+            {
+                var msg = SocketMessageSerializer.DeserializeMessage(entity.MessageJson) as NotificationMessage;
+                if (msg is null) continue;
+
+                var notif = await Notification.FromMessage(msg);
+                notif.Pinned = entity.Pinned;
+                notif.DeviceId = device.Id;
+                notifications.Add(notif);
+            }
+
+            deviceNotifications[device.Id] = notifications;
+            loadedDeviceIds.Add(device.Id);
+
+            if (deviceManager.ActiveDevice?.Id == device.Id)
+            {
+                UpdateActiveNotifications(device);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error loading notifications for device {DeviceId}", device.Id);
+        }
     }
 
     /// <summary>

@@ -32,6 +32,7 @@ public static class AppLifecycleHelper
     public static async Task InitializeAppComponentsAsync()
     {
         var networkService = Ioc.Default.GetRequiredService<INetworkService>();
+        var discoveryService = Ioc.Default.GetRequiredService<IDiscoveryService>();
         var notificationService = Ioc.Default.GetRequiredService<INotificationService>();
         var deviceManager = Ioc.Default.GetRequiredService<IDeviceManager>();
         var adbService = Ioc.Default.GetRequiredService<IAdbService>();
@@ -50,6 +51,7 @@ public static class AppLifecycleHelper
 
         await Task.WhenAll(
             networkService.StartServerAsync(),
+            discoveryService.StartDiscoveryAsync(),
             playbackService.InitializeAsync(),
             actionService.InitializeAsync(),
             adbService.StartAsync(),
@@ -110,6 +112,7 @@ public static class AppLifecycleHelper
                 .AddSingleton<DatabaseContext>()
                 .AddSingleton<DeviceRepository>()
                 .AddSingleton<RemoteAppRepository>()
+                .AddSingleton<NotificationRepository>()
                 .AddSingleton<SmsRepository>()
 
                 // Platform-specific services

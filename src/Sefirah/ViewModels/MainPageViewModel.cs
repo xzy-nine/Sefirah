@@ -4,6 +4,7 @@ using Sefirah.Data.Enums;
 using Sefirah.Data.Models;
 using Sefirah.Utils;
 using Sefirah.Utils.Serialization;
+using System.ComponentModel;
 
 namespace Sefirah.ViewModels;
 public sealed partial class MainPageViewModel : BaseViewModel
@@ -28,6 +29,21 @@ public sealed partial class MainPageViewModel : BaseViewModel
 
     public bool IsUpdateAvailable => UpdateService.IsUpdateAvailable;
     #endregion
+
+    public MainPageViewModel()
+    {
+        // 当 DeviceManager.ActiveDevice 变化时，让 x:Bind 的 Device 属性重新求值
+        if (DeviceManager is INotifyPropertyChanged npc)
+        {
+            npc.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(IDeviceManager.ActiveDevice))
+                {
+                    OnPropertyChanged(nameof(Device));
+                }
+            };
+        }
+    }
 
     #region Commands
 
@@ -179,12 +195,4 @@ public sealed partial class MainPageViewModel : BaseViewModel
 
     #endregion
 
-    public MainPageViewModel()
-    {
-        ((INotifyPropertyChanged)DeviceManager).PropertyChanged += (s, e) =>
-        {
-            if (e.PropertyName is nameof(IDeviceManager.ActiveDevice))
-                OnPropertyChanged(nameof(Device));
-        };
-    }
 }
