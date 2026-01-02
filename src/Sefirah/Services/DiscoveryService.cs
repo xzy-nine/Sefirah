@@ -39,7 +39,7 @@ public class DiscoveryService(
             localDevice = await deviceManager.GetLocalDeviceAsync();
             var localAddresses = NetworkHelper.GetAllValidAddresses();
 
-            logger.LogInformation($"Address to advertise: {string.Join(", ", localAddresses)}");
+            logger.LogInformation($"将广播的地址：{string.Join(", ", localAddresses)}");
 
             var (name, _) = await UserInformation.GetCurrentUserInfoAsync();
             var encodedName = Convert.ToBase64String(Encoding.UTF8.GetBytes(name));
@@ -62,7 +62,7 @@ public class DiscoveryService(
             var ipAddresses = deviceManager.GetRemoteDeviceIpAddresses();
             broadcastEndpoints.AddRange(ipAddresses.Select(ip => new IPEndPoint(IPAddress.Parse(ip), DiscoveryPort)));
 
-            logger.LogInformation("Active broadcast endpoints: {endpoints}", string.Join(", ", broadcastEndpoints));
+            logger.LogInformation("当前广播端点：{endpoints}", string.Join(", ", broadcastEndpoints));
 
 
             udpClient = new MulticastClient("0.0.0.0", port, this, logger)
@@ -76,13 +76,13 @@ public class DiscoveryService(
             if (udpClient.Connect())
             {
                 udpClient.Socket.EnableBroadcast = true;
-                logger.LogInformation("UDP Client connected successfully {port}", port);
+                logger.LogInformation("UDP 客户端连接成功（端口：{port}）", port);
 
                 BroadcastDeviceInfoAsync(discoverMessage);
             }
             else
             {
-                logger.LogError("Failed to connect UDP client");
+                logger.LogError("UDP 客户端连接失败");
             }
             mdnsService.DiscoveredMdnsService += OnDiscoveredMdnsService;
             mdnsService.ServiceInstanceShutdown += OnServiceInstanceShutdown;
@@ -90,7 +90,7 @@ public class DiscoveryService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error starting discovery");
+            logger.LogError(ex, "启动发现服务时出错");
         }
     }
 
@@ -135,7 +135,7 @@ public class DiscoveryService(
 
         DiscoveredMdnsServices.Add(service);
         
-        logger.LogInformation("Discovered service instance: {deviceId}, {deviceName}", service.DeviceId, service.DeviceName);
+        logger.LogInformation("发现服务实例：{deviceId}，{deviceName}", service.DeviceId, service.DeviceName);
 
         DiscoveredDevice device = new(
             service.DeviceId,
@@ -183,11 +183,11 @@ public class DiscoveryService(
             }
             catch (Exception ex) when (ex is ArgumentOutOfRangeException or InvalidOperationException)
             {
-                logger.LogWarning("Device removal {Message}", ex.Message);
+                logger.LogWarning("移除设备时：{Message}", ex.Message);
             }
             catch (Exception ex)
             {
-                logger.LogWarning("Unexpected error removing device: {Message}", ex.Message);
+                logger.LogWarning("移除设备时出现意外错误：{Message}", ex.Message);
             }
         });
     }
@@ -253,7 +253,7 @@ public class DiscoveryService(
         }
         catch (Exception ex)
         {
-            logger.LogWarning("Error processing UDP message: {message}", ex.Message);
+            logger.LogWarning("处理 UDP 消息时出错：{message}", ex.Message);
         }
     }
 
@@ -310,7 +310,7 @@ public class DiscoveryService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error during cleanup of stale devices");
+            logger.LogError(ex, "清理过期设备时出错");
         }
     }
 
@@ -326,7 +326,7 @@ public class DiscoveryService(
         }
         catch (Exception ex)
         {
-            logger.LogError("Error disposing default UDP client: {message}", ex.Message);
+            logger.LogError("释放默认 UDP 客户端时出错：{message}", ex.Message);
         }
     }
 }

@@ -10,12 +10,12 @@ public class DesktopSftpService(ILogger<DesktopSftpService> logger) : ISftpServi
 
     public async Task InitializeAsync(PairedDevice device, SftpServerInfo info)
     {
-        logger.LogInformation("Initializing SFTP service for device {DeviceName}, IP: {IpAddress}, Port: {Port}, Password: {Password}", 
+        logger.LogInformation("正在为设备 {DeviceName} 初始化 SFTP 服务，IP：{IpAddress}，端口：{Port}，密码：{Password}", 
             device.Name, info.IpAddress, info.Port, info.Password);
 
         var sftpUri = $"sftp://{info.Username}@{info.IpAddress}:{info.Port}/";
         
-        logger.LogInformation("Mounting SFTP for device {DeviceName}", device.Name);
+        logger.LogInformation("正在为设备 {DeviceName} 挂载 SFTP", device.Name);
 
         ProcessExecutor.ExecuteProcess("gio", $"mount -s \"{sftpUri}\"");
 
@@ -24,12 +24,12 @@ public class DesktopSftpService(ILogger<DesktopSftpService> logger) : ISftpServi
         
         if (exitCode != 0)
         {
-            logger.LogError("Failed to mount SFTP for device {DeviceName}: {Error}", device.Name, errorOutput);
+            logger.LogError("为设备 {DeviceName} 挂载 SFTP 失败：{Error}", device.Name, errorOutput);
             return;
         }
         
         _mountedDevices[device.Id] = sftpUri;
-        logger.LogInformation("Successfully mounted SFTP for device {DeviceName}", device.Name);
+        logger.LogInformation("为设备 {DeviceName} 成功挂载 SFTP", device.Name);
     }
 
     private static async Task<(int ExitCode, string ErrorOutput)> ExecuteProcessWithPasswordAsync(string fileName, string arguments, string password)
@@ -47,7 +47,7 @@ public class DesktopSftpService(ILogger<DesktopSftpService> logger) : ISftpServi
         using var process = Process.Start(psi);
         if (process == null)
         {
-            return (-1, "Failed to start process");
+            return (-1, "启动进程失败");
         }
 
         // Send password to stdin when prompted
@@ -65,11 +65,11 @@ public class DesktopSftpService(ILogger<DesktopSftpService> logger) : ISftpServi
     {
         if (!_mountedDevices.TryGetValue(deviceId, out var sftpUri))
         {
-            logger.LogDebug("Device {DeviceId} is not mounted", deviceId);
+            logger.LogDebug("设备 {DeviceId} 未挂载", deviceId);
             return;
         }
         
-        logger.LogInformation("Unmounting SFTP for device {DeviceId}", deviceId);
+        logger.LogInformation("正在卸载设备 {DeviceId} 的 SFTP 挂载", deviceId);
         ProcessExecutor.ExecuteProcess("gio", $"mount -u \"{sftpUri}\"");
         _mountedDevices.Remove(deviceId);
     }

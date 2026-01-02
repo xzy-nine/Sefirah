@@ -64,7 +64,7 @@ public sealed partial class AppsViewModel : BaseViewModel
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error pinning app: {AppPackage}", app?.PackageName);
+            Logger.LogError(ex, "置顶应用失败：{AppPackage}", app?.PackageName);
         }
     }
 
@@ -81,7 +81,7 @@ public sealed partial class AppsViewModel : BaseViewModel
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error uninstalling app: {AppPackage}", app.PackageName);
+            Logger.LogError(ex, "卸载应用失败：{AppPackage}", app.PackageName);
         }
     }
 
@@ -93,7 +93,7 @@ public sealed partial class AppsViewModel : BaseViewModel
     {
         try
         {
-            Logger.LogInformation("Loading apps");
+            Logger.LogInformation("正在加载应用");
             IsLoading = true;
 
             if (DeviceManager.ActiveDevice is null) return;
@@ -111,7 +111,7 @@ public sealed partial class AppsViewModel : BaseViewModel
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error loading apps");
+            Logger.LogError(ex, "加载应用时出错");
         }
         finally
         {
@@ -133,7 +133,7 @@ public sealed partial class AppsViewModel : BaseViewModel
             app.IsLoading = true;
             try
             {
-                Logger.LogDebug("Opening app: {AppPackage}", app.AppName);
+                Logger.LogDebug("正在打开应用：{AppPackage}", app.AppName);
                 var started = await ScreenMirrorService.StartScrcpy(DeviceManager.ActiveDevice!, $"--start-app={app.PackageName} --window-title=\"{app.AppName}\"", GetAppIconFilePath(app.PackageName));
                 if (started)
                 {

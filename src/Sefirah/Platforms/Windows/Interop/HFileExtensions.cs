@@ -18,6 +18,6 @@ public static class HFileExtensions
         var lastError = Marshal.GetLastWin32Error();
         fileHandle.Dispose();
         
-        throw new HFileException($"Failed to create valid file handle for: {path}", lastError, path);
+        throw new HFileException($"为路径创建合法文件句柄失败：{path}", lastError, path);
     }
 }

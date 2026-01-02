@@ -31,11 +31,11 @@ public class MdnsService(ILogger<MdnsService> logger) : IMdnsService
             serviceDiscovery = new ServiceDiscovery(multicastService);
             serviceDiscovery.Advertise(serviceProfile);
 
-            logger.LogInformation("Advertising service for {name}", serviceProfile.InstanceName);
+            logger.LogInformation("正在发布服务广告：{name}", serviceProfile.InstanceName);
         }
         catch (Exception ex)
         {
-            logger.LogError("Failed to advertise service {ex}", ex);
+            logger.LogError("发布服务广告失败：{ex}", ex);
             throw;
         }
     }
@@ -47,12 +47,12 @@ public class MdnsService(ILogger<MdnsService> logger) : IMdnsService
         {
             if (serviceDiscovery is not null && serviceProfile is not null && multicastService is not null)
             {
-                logger.LogInformation("Un-advertising service for {0}", serviceProfile.InstanceName);
+                logger.LogInformation("正在取消发布服务：{0}", serviceProfile.InstanceName);
 
                 // Validate service instance name format
                 if (string.IsNullOrWhiteSpace(serviceProfile.QualifiedServiceName.ToString()))
                 {
-                    logger.LogWarning("Service profile has invalid name, skipping unadvertise");
+                    logger.LogWarning("服务配置名称无效，跳过取消发布");
                     return;
                 }
                 serviceDiscovery.Unadvertise(serviceProfile);
@@ -61,7 +61,7 @@ public class MdnsService(ILogger<MdnsService> logger) : IMdnsService
         }
         catch (ArgumentOutOfRangeException ex)
         {
-            logger.LogError("Service already unadvertised or invalid state: {ex}", ex);
+            logger.LogError("服务已取消发布或状态无效：{ex}", ex);
         }
         finally
         {
@@ -74,7 +74,7 @@ public class MdnsService(ILogger<MdnsService> logger) : IMdnsService
 
         if (serviceDiscovery is null)
         {
-            logger.LogWarning("Service already unadvertised or not initialized");
+            logger.LogWarning("服务已取消发布或未初始化");
         }
     }
 
@@ -144,11 +144,11 @@ public class MdnsService(ILogger<MdnsService> logger) : IMdnsService
             };
 
             multicastService.Start();
-            logger.LogInformation("Started mDNS discovery service");
+            logger.LogInformation("mDNS 发现服务已启动");
         }
         catch (Exception ex)
         {
-            logger.LogError("Failed to start discovery service: {ex}", ex);
+            logger.LogError("启动发现服务失败：{ex}", ex);
         }
     }
 }

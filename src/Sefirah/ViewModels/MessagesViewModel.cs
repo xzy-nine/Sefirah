@@ -136,7 +136,7 @@ public sealed partial class MessagesViewModel : BaseViewModel
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error loading conversations for device: {DeviceId}", ActiveDevice?.Id);
+            Logger.LogError(ex, "加载设备 {DeviceId} 的会话时出错", ActiveDevice?.Id);
         }
     }
 
@@ -167,7 +167,7 @@ public sealed partial class MessagesViewModel : BaseViewModel
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error loading messages for conversation: {ThreadId}", SelectedConversation.ThreadId);
+            Logger.LogError(ex, "加载会话 {ThreadId} 的消息时出错", SelectedConversation.ThreadId);
         }
     }
 
@@ -220,7 +220,7 @@ public sealed partial class MessagesViewModel : BaseViewModel
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error sending message");
+            Logger.LogError(ex, "发送消息时出错");
         }
     }
     public void StartNewConversation()

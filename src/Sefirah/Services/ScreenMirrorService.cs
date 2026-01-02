@@ -37,7 +37,7 @@ public class ScreenMirrorService(
             var scrcpyPath = userSettingsService.GeneralSettingsService.ScrcpyPath;
             if (!File.Exists(scrcpyPath))
             {
-                logger.LogError("Scrcpy not found at {ScrcpyPath}", scrcpyPath);
+                logger.LogError("未在路径找到 scrcpy：{ScrcpyPath}", scrcpyPath);
                 var result = await dispatcher!.EnqueueAsync(async () =>
                 {
                     var dialog = new ContentDialog
@@ -100,7 +100,7 @@ public class ScreenMirrorService(
                         selectedDeviceSerial = await ShowDeviceSelectionDialog(pairedDevices);
                         if (string.IsNullOrEmpty(selectedDeviceSerial))
                         {
-                            logger.LogWarning("No device selected for scrcpy");
+                            logger.LogWarning("未选择用于 scrcpy 的设备");
                             return false;
                         }
                         break;
@@ -164,7 +164,7 @@ public class ScreenMirrorService(
             }
             else
             {
-                logger.LogWarning("No online devices found from adb");
+                logger.LogWarning("未在 adb 中找到在线设备");
                 dispatcher?.EnqueueAsync(async () =>
                 {
                     var dialog = new ContentDialog
@@ -209,7 +209,7 @@ public class ScreenMirrorService(
             if (!string.IsNullOrEmpty(iconPath))
             {
                 process.StartInfo.EnvironmentVariables["SCRCPY_ICON_PATH"] = iconPath;
-                logger.Info($"Using custom scrcpy icon: {iconPath}");
+                logger.Info($"正在使用自定义 scrcpy 图标：{iconPath}");
             }
 
             bool started;
@@ -219,7 +219,7 @@ public class ScreenMirrorService(
             }
             catch (Exception ex)
             {
-                logger.LogError($"Failed to start scrcpy: {ex.Message}", ex);
+                logger.LogError($"启动 scrcpy 失败：{ex.Message}", ex);
                 process?.Dispose();
                 processCts.Dispose();
                 if (ReferenceEquals(cts, processCts)) cts = null;
@@ -228,7 +228,7 @@ public class ScreenMirrorService(
 
             if (!started)
             {
-                logger.LogError("Failed to start scrcpy process");
+                logger.LogError("启动 scrcpy 进程失败");
                 process?.Dispose();
                 processCts.Dispose();
                 if (ReferenceEquals(cts, processCts)) cts = null;
@@ -240,7 +240,7 @@ public class ScreenMirrorService(
         }
         catch (Exception ex)
         {
-            logger.LogError("Error in StartScrcpy {ex}", ex);
+            logger.LogError("StartScrcpy 中出错：{ex}", ex);
             processCts?.Dispose();
             if (ReferenceEquals(cts, processCts)) cts = null;
             process?.Dispose();
@@ -255,14 +255,14 @@ public class ScreenMirrorService(
         process.OutputDataReceived += (_, e) => 
         {
             if (!string.IsNullOrEmpty(e.Data))
-                logger.LogInformation($"scrcpy: {e.Data}");
+                logger.LogInformation($"scrcpy：{e.Data}");
         };
         
         process.ErrorDataReceived += (_, e) =>
         {
             if (!string.IsNullOrEmpty(e.Data))
             {
-                logger.LogError($"scrcpy error: {e.Data}");
+                logger.LogError($"scrcpy 错误：{e.Data}");
                 lock (errorOutput)
                 {
                     errorOutput.AppendLine(e.Data);
@@ -270,11 +270,11 @@ public class ScreenMirrorService(
             }
         };
         
-        process.Exited += (_, _) => logger.LogInformation("scrcpy process terminated");
+        process.Exited += (_, _) => logger.LogInformation("scrcpy 进程已终止");
         
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
-        logger.LogInformation("scrcpy process started {pid}", process.Id);
+        logger.LogInformation("scrcpy 进程已启动（pid：{pid}）", process.Id);
        
 
         scrcpyProcesses.Add(deviceSerial, process);
@@ -284,16 +284,16 @@ public class ScreenMirrorService(
             try
             {
                 await process.WaitForExitAsync(processCts.Token);
-                logger.LogInformation("scrcpy process exited with code: {exitCode}", process.ExitCode);
+                logger.LogInformation("scrcpy 进程退出，代码：{exitCode}", process.ExitCode);
                 
                 if (process.ExitCode != 0 && process.ExitCode != 2)
                 {
                     string errorMessage;
                     lock (errorOutput)
                     {
-                        errorMessage = $"Scrcpy process exited with code {process.ExitCode}\n\nError Output:\n{errorOutput.ToString().TrimEnd()}";
+                        errorMessage = $"Scrcpy 进程以代码 {process.ExitCode} 退出\n\n错误输出：\n{errorOutput.ToString().TrimEnd()}";
                     }
-                    logger.LogError("Scrcpy failed: {error}", errorMessage);
+                    logger.LogError("scrcpy 失败：{error}", errorMessage);
 
                     await dispatcher!.EnqueueAsync(async () =>
                     {
@@ -325,7 +325,7 @@ public class ScreenMirrorService(
                             var dataPackage = new DataPackage();
                             dataPackage.SetText(errorMessage);
                             Clipboard.SetContent(dataPackage);
-                            logger.LogInformation("Scrcpy error output copied to clipboard");
+                            logger.LogInformation("scrcpy 错误输出已复制到剪贴板");
                         }
                     });
                 }
@@ -334,7 +334,7 @@ public class ScreenMirrorService(
             {
                 if (ex is not OperationCanceledException)
                 {
-                    logger.LogError("Error monitoring scrcpy process {ex}", ex);
+                    logger.LogError("监控 scrcpy 进程时出错：{ex}", ex);
                 }
             }
             finally
@@ -526,7 +526,7 @@ public class ScreenMirrorService(
                     }
                     catch (Exception ex)
                     {
-                        logger.LogError($"Failed to terminate existing process: {ex.Message}", ex);
+                        logger.LogError($"终止现有进程失败：{ex.Message}", ex);
                     }
                 }
             }

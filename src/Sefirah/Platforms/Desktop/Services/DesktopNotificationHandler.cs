@@ -33,14 +33,14 @@ public class DesktopNotificationHandler(
             string? sessionBusAddress = Address.Session;
             if (sessionBusAddress is null)
             {
-                logger.LogWarning("Cannot determine session bus address. D-Bus may not be available on this system.");
+                logger.LogWarning("无法确定会话总线地址，系统可能不支持 D-Bus。");
                 return false;
             }
 
             // Create connection to the session bus
             _connection = new Connection(sessionBusAddress);
             await _connection.ConnectAsync();
-            logger.LogDebug("Connected to D-Bus session bus");
+            logger.LogDebug("已连接到 D-Bus 会话总线");
 
             // Create the notifications service
             _notificationService = new NotificationsService(_connection, "org.freedesktop.Notifications");
@@ -48,19 +48,19 @@ public class DesktopNotificationHandler(
 
             // Test if the notification service is available
             var serverInfo = await _notifications.GetServerInformationAsync();
-            logger.LogDebug("Notification server: {Name} {Version}, Vendor: {Vendor}", 
+            logger.LogDebug("通知服务器：{Name} {Version}，厂商：{Vendor}", 
                 serverInfo.Name, serverInfo.Version, serverInfo.Vendor);
 
             // Set up action watching
             _actionWatcher = await _notifications.WatchActionInvokedAsync(OnActionInvoked);
-            logger.LogDebug("Action watcher registered for D-Bus notifications");
+            logger.LogDebug("已为 D-Bus 通知注册动作监听");
 
             _isInitialized = true;
             return true;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to initialize D-Bus notifications");
+            logger.LogError(ex, "初始化 D-Bus 通知失败");
             return false;
         }
     }
@@ -131,12 +131,12 @@ public class DesktopNotificationHandler(
                 _notificationActions[notificationId] = actionData;
             }
 
-            logger.LogDebug("Remote notification sent with ID: {NotificationId}, Actions: {ActionCount}", 
+            logger.LogDebug("已发送远程通知：ID：{NotificationId}，动作数：{ActionCount}", 
                 notificationId, actionData.Actions.Count);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to show remote notification");
+            logger.LogError(ex, "显示远程通知失败");
         }
     }
 
@@ -174,11 +174,11 @@ public class DesktopNotificationHandler(
                 expireTimeout: 5000 // 5 seconds
             );
 
-            logger.LogDebug("Simple notification sent with ID: {NotificationId}", notificationId);
+            logger.LogDebug("已发送简单通知：ID：{NotificationId}", notificationId);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to show simple notification");
+            logger.LogError(ex, "显示简单通知失败");
         }
     }
 
@@ -237,12 +237,12 @@ public class DesktopNotificationHandler(
                 _notificationActions[notificationId] = notificationActionData;
             }
 
-            logger.LogDebug("Clipboard notification sent with ID: {NotificationId}, Actions: {ActionCount}", 
+            logger.LogDebug("已发送剪贴板通知：ID：{NotificationId}，动作数：{ActionCount}", 
                 notificationId, notificationActionData.Actions.Count);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to show clipboard notification");
+            logger.LogError(ex, "显示剪贴板通知失败");
         }
     }
 
@@ -273,11 +273,11 @@ public class DesktopNotificationHandler(
                 expireTimeout: 6000 // 6 seconds
             );
 
-            logger.LogDebug("File transfer notification sent with ID: {NotificationId}", notificationId);
+            logger.LogDebug("已发送文件传输通知：ID：{NotificationId}", notificationId);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to show file transfer notification");
+            logger.LogError(ex, "显示文件传输通知失败");
         }
     }
 
@@ -302,12 +302,12 @@ public class DesktopNotificationHandler(
             {
                 await _notifications.CloseNotificationAsync(notificationId);
                 _notificationIds.Remove(notificationKey);
-                logger.LogDebug("Removed notification with key: {NotificationKey}", notificationKey);
+                logger.LogDebug("已移除通知，键：{NotificationKey}", notificationKey);
             }
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to remove notification with key {NotificationKey}", notificationKey);
+            logger.LogWarning(ex, "移除通知失败，键：{NotificationKey}", notificationKey);
         }
     }
 
@@ -334,17 +334,17 @@ public class DesktopNotificationHandler(
     {
         if (ex != null)
         {
-            logger.LogError(ex, "Error in action invoked handler");
+            logger.LogError(ex, "动作回调处理时出错");
             return;
         }
 
         try
         {
-            logger.LogDebug("Action invoked - ID: {NotificationId}, ActionKey: {ActionKey}", args.Id, args.ActionKey);
+            logger.LogDebug("动作已触发 - ID：{NotificationId}，ActionKey：{ActionKey}", args.Id, args.ActionKey);
 
             if (!_notificationActions.TryGetValue(args.Id, out var actionData))
             {
-                logger.LogWarning("No action data found for notification ID: {NotificationId}", args.Id);
+                logger.LogWarning("未找到通知 ID 的操作数据：{NotificationId}", args.Id);
                 return;
             }
 
@@ -356,7 +356,7 @@ public class DesktopNotificationHandler(
         }
         catch (Exception actionEx)
         {
-            logger.LogError(actionEx, "Error handling notification action");
+            logger.LogError(actionEx, "处理通知操作时出错");
         }
     }
 
@@ -364,12 +364,12 @@ public class DesktopNotificationHandler(
     {
         try
         {
-            logger.LogDebug("Handling notification action - ID: {NotificationId}, ActionKey: {ActionKey}", notificationId, actionKey);
+            logger.LogDebug("正在处理通知动作 - ID：{NotificationId}，ActionKey：{ActionKey}", notificationId, actionKey);
 
             var action = actionData.Actions.FirstOrDefault(a => a.ActionId == actionKey);
             if (action == null)
             {
-                logger.LogWarning("Action not found: {ActionKey} for notification ID: {NotificationId}", actionKey, notificationId);
+                logger.LogWarning("未找到动作：{ActionKey}（通知 ID：{NotificationId}）", actionKey, notificationId);
                 return;
             }
 
@@ -385,13 +385,13 @@ public class DesktopNotificationHandler(
                     break;
                 
                 default:
-                    logger.LogWarning("Unhandled notification type: {NotificationType}", actionData.NotificationType);
+                    logger.LogWarning("未处理的通知类型：{NotificationType}", actionData.NotificationType);
                     break;
             }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error handling notification action");
+            logger.LogError(ex, "处理通知操作时出错");
         }
     }
 
@@ -399,7 +399,7 @@ public class DesktopNotificationHandler(
     {
         if (string.IsNullOrEmpty(actionData.DeviceId) || string.IsNullOrEmpty(actionData.NotificationKey))
         {
-            logger.LogWarning("Missing device ID or notification key for remote notification action");
+            logger.LogWarning("缺少设备 ID 或通知键，无法处理远程通知动作");
             return;
         }
 
@@ -407,13 +407,13 @@ public class DesktopNotificationHandler(
         var device = deviceManager.FindDeviceById(actionData.DeviceId);
         if (device == null)
         {
-            logger.LogWarning("Could not find device with ID: {DeviceId}", actionData.DeviceId);
+            logger.LogWarning("未找到设备，ID：{DeviceId}", actionData.DeviceId);
             return;
         }
 
         // Process the click action using the static utility
         NotificationActionUtils.ProcessClickAction(sessionManager, logger, device, actionData.NotificationKey, action.ActionIndex);
-        logger.LogDebug("Processed remote notification action for device {DeviceId}, action index: {ActionIndex}", 
+        logger.LogDebug("已处理远程通知动作：设备 {DeviceId}，动作索引：{ActionIndex}", 
             actionData.DeviceId, action.ActionIndex);
     }
 
@@ -421,7 +421,7 @@ public class DesktopNotificationHandler(
     {
         if (string.IsNullOrEmpty(action.Data))
         {
-            logger.LogWarning("No data provided for clipboard action");
+            logger.LogWarning("剪贴板动作未提供数据");
             return;
         }
 
@@ -439,16 +439,16 @@ public class DesktopNotificationHandler(
                     }
                 };
                 process.Start();
-                logger.LogDebug("Opened URL: {Url}", uri);
+                logger.LogDebug("已打开 URL：{Url}", uri);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to open URL: {Url}", uri);
+                logger.LogError(ex, "打开 URL 失败：{Url}", uri);
             }
         }
         else
         {
-            logger.LogWarning("Invalid URL in clipboard action: {Data}", action.Data);
+            logger.LogWarning("剪贴板操作中的 URL 无效：{Data}", action.Data);
         }
     }
 
@@ -461,7 +461,7 @@ public class DesktopNotificationHandler(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Error disposing D-Bus connection");
+            logger.LogWarning(ex, "释放 D-Bus 连接时出错");
         }
     }
 }

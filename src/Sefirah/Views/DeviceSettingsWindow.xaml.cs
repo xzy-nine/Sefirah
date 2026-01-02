@@ -104,7 +104,7 @@ public sealed partial class DeviceSettingsWindow : Window
 #endif
 
     private void OnNavigationFailed(object sender, NavigationFailedEventArgs e)
-        => new Exception("Failed to load Page " + e.SourcePageType.FullName);
+        => new Exception("加载页面失败：" + e.SourcePageType.FullName);
 
     private void TitleBar_BackRequested(object sender, RoutedEventArgs e)
     {

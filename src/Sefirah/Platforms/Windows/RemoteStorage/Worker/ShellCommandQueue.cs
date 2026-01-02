@@ -37,7 +37,7 @@ public sealed class ShellCommandQueue(
 
                     var state = CloudFilter.GetPlaceholderState(shellCommand.FullPath);                    
                     // Broken upload, state is just "No State"
-                    logger.LogInformation("placeholder state {state}", state);
+                    logger.LogInformation("占位符状态：{state}", state);
                     if (state == CF_PLACEHOLDER_STATE.CF_PLACEHOLDER_STATE_NO_STATES ||
                         state == CF_PLACEHOLDER_STATE.CF_PLACEHOLDER_STATE_IN_SYNC ||
                         state == CF_PLACEHOLDER_STATE.CF_PLACEHOLDER_STATE_PLACEHOLDER)
@@ -66,11 +66,11 @@ public sealed class ShellCommandQueue(
                             try
                             {
                                 CloudFilter.SetInSyncState(shellCommand.FullPath);
-                                logger.LogInformation("Set sync state after upload for {path}", shellCommand.FullPath);
+                                logger.LogInformation("上传后设置同步状态：{path}", shellCommand.FullPath);
                             }
                             catch (Exception ex)
                             {
-                                logger.LogError(ex, "Failed to set sync state for {path}", shellCommand.FullPath);
+                                logger.LogError(ex, "设置同步状态失败：{path}", shellCommand.FullPath);
                             }
                         }
                     }
@@ -90,7 +90,7 @@ public sealed class ShellCommandQueue(
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "Error in handling shell command");
+                    logger.LogError(ex, "处理 shell 命令时出错");
                 }
             }
         });

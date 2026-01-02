@@ -74,7 +74,7 @@ public class SyncRootRegistrar(
         };
          //info.StorageProviderItemPropertyDefinitions.Add()
 
-        logger.LogDebug("Registering {syncRootId}", id);
+        logger.LogDebug("注册同步根：{syncRootId}", id);
         StorageProviderSyncRootManager.Register(info);
 
         return info;
@@ -82,7 +82,7 @@ public class SyncRootRegistrar(
 
     public void Unregister(string id)
     {
-        logger.LogDebug("Unregistering {syncRootId}", id);
+        logger.LogDebug("注销同步根：{syncRootId}", id);
         try
         {
             // Try to force garbage collection and cleanup before unregistering
@@ -93,11 +93,11 @@ public class SyncRootRegistrar(
         }
         catch (COMException ex) when (ex.HResult == -2147023728)
         {
-            logger.LogError(ex, "Sync root not found");
+            logger.LogError(ex, "未找到同步根");
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Unregister sync root failed");
+            logger.LogError(ex, "注销同步根失败");
         }
     }
 
@@ -113,7 +113,7 @@ public class SyncRootRegistrar(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to update credentials");
+            logger.LogError(ex, "更新凭据失败");
             throw;
         }
     }

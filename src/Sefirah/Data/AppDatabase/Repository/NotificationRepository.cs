@@ -18,7 +18,7 @@ public class NotificationRepository(DatabaseContext context, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to load notifications for device {DeviceId}", deviceId);
+            logger.LogError(ex, "加载设备 {DeviceId} 的通知失败", deviceId);
             return [];
         }
     }
@@ -41,7 +41,7 @@ public class NotificationRepository(DatabaseContext context, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to upsert notification {Key} for device {DeviceId}", message.NotificationKey, deviceId);
+            logger.LogError(ex, "保存/更新设备 {DeviceId} 的通知 {Key} 失败", deviceId, message.NotificationKey);
         }
     }
 
@@ -58,7 +58,7 @@ public class NotificationRepository(DatabaseContext context, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to delete notification {Key} for device {DeviceId}", notificationKey, deviceId);
+            logger.LogError(ex, "删除设备 {DeviceId} 的通知 {Key} 失败", deviceId, notificationKey);
         }
     }
 
@@ -70,7 +70,7 @@ public class NotificationRepository(DatabaseContext context, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to clear notifications for device {DeviceId}", deviceId);
+            logger.LogError(ex, "清空设备 {DeviceId} 的通知失败", deviceId);
         }
     }
 
@@ -87,7 +87,7 @@ public class NotificationRepository(DatabaseContext context, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to update pinned for notification {Key} on device {DeviceId}", notificationKey, deviceId);
+            logger.LogError(ex, "更新设备 {DeviceId} 的通知 {Key} 的置顶状态失败", deviceId, notificationKey);
         }
     }
 

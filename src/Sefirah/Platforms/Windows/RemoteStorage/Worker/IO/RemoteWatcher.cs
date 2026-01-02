@@ -43,7 +43,7 @@ public sealed class RemoteWatcher(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Handle Created failed for: {relativePath}",relativePath);
+                logger.LogError(ex, "处理创建失败：{relativePath}",relativePath);
             }
         });
     }
@@ -70,7 +70,7 @@ public sealed class RemoteWatcher(
                         }
                         catch (Exception ex)
                         {
-                            logger.LogError(ex, "Failed to update file {file}", file.RelativePath);
+                            logger.LogError(ex, "更新文件失败：{file}", file.RelativePath);
                         }
                     }
                 }
@@ -81,7 +81,7 @@ public sealed class RemoteWatcher(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Handle Changed failed");
+                logger.LogError(ex, "处理更改失败");
             }
         });
     }
@@ -110,7 +110,7 @@ public sealed class RemoteWatcher(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Rename placeholder failed");
+                logger.LogError(ex, "重命名占位符失败");
             }
         });
     }
@@ -120,7 +120,7 @@ public sealed class RemoteWatcher(
         // Brief pause to let client finish before reflecting it back
         await Task.Delay(1000);
         relativePath = PathMapper.NormalizePath(relativePath);
-        logger.LogDebug("Deleted {path}", relativePath);
+        logger.LogDebug("已删除：{path}", relativePath);
         await taskWriter.WriteAsync(async () =>
         {
             using var locker = await fileLocker.Lock(relativePath);
@@ -130,7 +130,7 @@ public sealed class RemoteWatcher(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Delete placeholder failed");
+                logger.LogError(ex, "删除占位符失败");
             }
         });
     }

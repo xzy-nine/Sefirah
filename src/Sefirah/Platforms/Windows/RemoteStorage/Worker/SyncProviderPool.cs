@@ -27,7 +27,7 @@ public class SyncProviderPool(
             // If there's an existing thread, stop it first
             if (_threads.TryGetValue(syncRootInfo.Id, out var existingThread))
             {
-                logger.LogDebug("Stopping existing sync provider for {id}", syncRootInfo.Id);
+                logger.LogDebug("停止现有同步提供程序：{id}", syncRootInfo.Id);
                 existingThread.Stop().Wait();
                 _threads.Remove(syncRootInfo.Id);
             }
@@ -45,7 +45,7 @@ public class SyncProviderPool(
 
             thread.Start();
             _threads[syncRootInfo.Id] = thread;
-            logger.LogDebug("Started new sync provider for {id}", syncRootInfo.Id);
+            logger.LogDebug("已启动新的同步提供程序：{id}", syncRootInfo.Id);
         }
     }
 
@@ -65,14 +65,14 @@ public class SyncProviderPool(
         {
             if (_threads.TryGetValue(syncRootInfo.Id, out var existingThread))
             {
-                logger.LogDebug("Stopping existing sync provider for {id}", syncRootInfo.Id);
+                logger.LogDebug("停止现有同步提供程序：{id}", syncRootInfo.Id);
                 await existingThread.Stop();
                 _threads.Remove(syncRootInfo.Id);
             }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to stop sync root");
+            logger.LogError(ex, "停止同步根失败");
         }
     }
 
@@ -118,7 +118,7 @@ public class SyncProviderPool(
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "Thread stopped unexpectedly");
+                    logger.LogError(ex, "线程意外停止");
                 }
                 Stopped?.Invoke(this, EventArgs.Empty);
             });

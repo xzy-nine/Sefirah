@@ -41,12 +41,12 @@ public class WindowsSftpService(
             if (currentOsVersion < requiredOsVersion)
             {
                 logger.LogWarning(
-                    "OS version {0} is lower than the required threshold {1}. Skipping sync root registration.",
+                    "操作系统版本 {0} 低于所需阈值 {1}，跳过同步根注册。",
                     currentOsVersion, requiredOsVersion);
                 return;
             }
 
-            logger.LogInformation("Initializing SFTP service, IP: {ip}, Port: {port}, Password: {pass}, Username: {name}",
+            logger.LogInformation("正在初始化 SFTP 服务，IP：{ip}，端口：{port}，密码：{pass}，用户名：{name}",
                 info.IpAddress, info.Port, info.Password, info.Username);
 
             var sftpContext = new SftpContext
@@ -82,7 +82,7 @@ public class WindowsSftpService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to initialize SFTP service");
+            logger.LogError(ex, "初始化 SFTP 服务失败");
             throw;
         }
     }
@@ -103,7 +103,7 @@ public class WindowsSftpService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error removing sync root for device {deviceId}", deviceId);
+            logger.LogError(ex, "移除设备 {deviceId} 的同步根失败", deviceId);
         }
     }
 
@@ -125,12 +125,12 @@ public class WindowsSftpService(
             if (info is not null)
             {
                 syncProviderPool.Start(info);
-                logger.LogDebug("Starting sync provider pool");
+                logger.LogDebug("正在启动同步提供程序池");
             }
         }
         catch (Exception ex) 
         {
-            logger.LogError(ex, "Failed to register sync root. Directory: {directory}, AccountId: {accountId}", directory, accountId);
+            logger.LogError(ex, "注册同步根失败。目录：{directory}，账户 ID：{accountId}", directory, accountId);
         }
     }
 }

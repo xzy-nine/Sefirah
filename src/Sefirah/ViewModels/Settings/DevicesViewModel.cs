@@ -77,7 +77,7 @@ public partial class DevicesViewModel : ObservableObject
                 var errorDialog = new ContentDialog
                 {
                     Title = "Error",
-                    Content = $"Failed to remove device: {ex.Message}",
+                    Content = $"删除设备失败：{ex.Message}",
                     CloseButtonText = "OK",
                     XamlRoot = App.MainWindow.Content!.XamlRoot
                 };

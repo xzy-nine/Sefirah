@@ -62,7 +62,7 @@ public class SyncCommand(
                 using var pShellItem = ComReleaserFactory.Create(psiItemArray.GetItemAt(i));
 
                 var rawFullPath = pShellItem.Item.GetDisplayName(SIGDN.SIGDN_FILESYSPATH);
-                logger.LogDebug("Sync Command received for file {path}", rawFullPath);
+                logger.LogDebug("收到同步命令，文件：{path}", rawFullPath);
 
                 commandWriter.TryWrite(new ShellCommand
                 {

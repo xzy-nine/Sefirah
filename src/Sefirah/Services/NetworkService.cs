@@ -48,7 +48,7 @@ public class NetworkService(
     {
         if (isRunning)
         {
-            logger.LogWarning("Server is already running");
+            logger.LogWarning("服务器已在运行");
             return false;
         }
         try
@@ -65,7 +65,7 @@ public class NetworkService(
             if (server.Start())
             {
                 isRunning = true;
-                logger.Info($"Server started on port: {ServerPort}");
+                logger.Info($"服务器已在端口 {ServerPort} 启动");
                 StartHeartbeat();
                 return true;
             }
@@ -73,12 +73,12 @@ public class NetworkService(
             server.Dispose();
             server = null;
 
-            logger.LogError("Failed to start server");
+            logger.LogError("启动服务器失败");
             return false;
         }
         catch (Exception ex)
         {
-            logger.LogError("Error starting server {ex}", ex);
+            logger.LogError("启动服务器时发生错误：{ex}", ex);
             return false;
         }
     }
@@ -89,13 +89,13 @@ public class NetworkService(
         {
             if (session is null)
             {
-                logger.LogDebug("Skip send: session is null");
+                logger.LogDebug("跳过发送：会话为空");
                 return;
             }
 
             if (deviceManager.PairedDevices is null)
             {
-                logger.LogWarning("Cannot send message, paired devices list not initialized");
+                logger.LogWarning("无法发送消息：配对设备列表未初始化");
                 return;
             }
 
@@ -114,24 +114,24 @@ public class NetworkService(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error scanning paired devices for session");
+                logger.LogError(ex, "扫描配对设备以查找会话时出错");
                 return;
             }
             if (device is null)
             {
-                logger.LogDebug("Skip send: no paired device for session {id}", session.Id);
+                logger.LogDebug("跳过发送：未找到与会话 {id} 对应的设备", session.Id);
                 return;
             }
 
             if (device.SharedSecret is null)
             {
-                logger.LogWarning("Cannot send encrypted message, shared secret missing for session {id}", session.Id);
+                logger.LogWarning("无法发送加密消息：会话 {id} 缺少共享密钥", session.Id);
                 return;
             }
 
             if (localPublicKey is null || localDeviceId is null)
             {
-                logger.LogWarning("Local identity not initialized, skip sending");
+                logger.LogWarning("本地身份未初始化，跳过发送");
                 return;
             }
 
@@ -145,12 +145,12 @@ public class NetworkService(
             }
             else
             {
-                logger.LogDebug("Skip send: session not connected for device {id}", device.Id);
+                logger.LogDebug("跳过发送：设备 {id} 的会话未连接", device.Id);
             }
         }
         catch (Exception ex)
         {
-            logger.LogError("Error sending message {ex}", ex);
+            logger.LogError("发送消息时出错：{ex}", ex);
         }
     }
 
@@ -166,7 +166,7 @@ public class NetworkService(
         }
         catch (Exception ex)
         {
-            logger.LogError("Error sending message to all {ex}", ex);
+            logger.LogError("向所有设备发送消息时出错：{ex}", ex);
         }
     }
 
@@ -180,7 +180,7 @@ public class NetworkService(
         }
         catch (Exception ex)
         {
-            logger.LogError("Error sending raw message {ex}", ex);
+            logger.LogError("发送原始消息时出错：{ex}", ex);
         }
     }
 
@@ -197,7 +197,7 @@ public class NetworkService(
 
     public void OnError(SocketError error)
     {
-        logger.LogError("Error on socket {error}", error);
+        logger.LogError("Socket 错误：{error}", error);
     }
 
     public async void OnReceived(ServerSession session, byte[] buffer, long offset, long size)
@@ -243,7 +243,7 @@ public class NetworkService(
         }
         catch (Exception ex)
         {
-            logger.LogError("Error in OnReceived for session {id}: {ex}", session.Id, ex);
+            logger.LogError("接收会话 {id} 数据时出错：{ex}", session.Id, ex);
             DisconnectSession(session);
         }
     }
@@ -262,7 +262,7 @@ public class NetworkService(
                 }
             }
 
-            logger.LogWarning("Unexpected pre-handshake message from {id}: {message}", session.Id, message);
+            logger.LogWarning("收到意外的预握手消息，来源：{id}，消息：{message}", session.Id, message);
             // 非握手报文不处理，等待合法握手再次到来
             return;
         }
@@ -270,7 +270,7 @@ public class NetworkService(
         var parts = message.Split(':');
         if (parts.Length < 3)
         {
-            logger.LogWarning("Invalid handshake format");
+            logger.LogWarning("握手格式无效");
             SendRaw(session, $"REJECT:{localDeviceId ?? string.Empty}");
             DisconnectSession(session);
             return;
@@ -286,13 +286,13 @@ public class NetworkService(
             discoveredName = discovery?.DiscoveredDevices.FirstOrDefault(d => d.DeviceId == remoteDeviceId)?.DeviceName;
         }
         var connectedSessionIpAddress = session.Socket.RemoteEndPoint?.ToString()?.Split(':')[0];
-        logger.Info($"Received handshake from {connectedSessionIpAddress}");
+        logger.Info($"收到握手来自 {connectedSessionIpAddress}");
 
         var device = await deviceManager.VerifyHandshakeAsync(remoteDeviceId, remotePublicKey, discoveredName, connectedSessionIpAddress);
 
         if (device is not null)
         {
-            logger.Info($"Device {device.Id} connected");
+            logger.Info($"设备 {device.Id} 已连接");
 
             device = await deviceManager.UpdateOrAddDeviceAsync(device, connectedDevice  =>
             {
@@ -322,7 +322,7 @@ public class NetworkService(
         {
             SendRaw(session, $"REJECT:{localDeviceId ?? string.Empty}");
             await Task.Delay(50);
-            logger.Info("Device verification failed or was declined");
+            logger.Info("设备验证失败或被拒绝");
             DisconnectSession(session);
         }
     }
@@ -342,19 +342,19 @@ public class NetworkService(
                 var parts = message.Split(':');
                 if (parts.Length < 4)
                 {
-                    logger.LogWarning("Invalid DATA frame");
+                    logger.LogWarning("无效的 DATA 帧");
                     return;
                 }
 
                 if (device.SharedSecret is null)
                 {
-                    logger.LogWarning("Shared secret missing for device {id}", device.Id);
+                    logger.LogWarning("设备 {id} 缺少共享密钥", device.Id);
                     return;
                 }
 
                 var encryptedPayload = string.Join(":", parts.Skip(3));
                 var decryptedPayload = NotifyCryptoHelper.Decrypt(encryptedPayload, device.SharedSecret);
-                logger.LogDebug("Received DATA payload len={len} for device {id}", decryptedPayload.Length, device.Id);
+                logger.LogDebug("收到来自设备 {id} 的 DATA 有效负载，长度={len}", device.Id, decryptedPayload.Length);
 
                 MarkDeviceAlive(device);
                 await DispatchPayloadAsync(device, decryptedPayload);
@@ -368,11 +368,11 @@ public class NetworkService(
                 return;
             }
 
-            logger.Debug("Received unsupported message format");
+            logger.Debug("收到不支持的消息格式");
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error handling protocol message");
+            logger.LogError(ex, "处理协议消息时出错");
         }
     }
 
@@ -391,13 +391,13 @@ public class NetworkService(
 
             if (device.RemotePublicKey is not null && !string.Equals(device.RemotePublicKey, remotePublicKey, StringComparison.Ordinal))
             {
-                logger.LogWarning("Remote public key mismatch for device {id}", remoteDeviceId);
+                logger.LogWarning("设备 {id} 的远端公钥不匹配", remoteDeviceId);
                 return null;
             }
 
             if (localPublicKey is null)
             {
-                logger.LogWarning("Local public key not initialized, cannot attach session");
+                logger.LogWarning("本地公钥未初始化，无法绑定会话");
                 return null;
             }
 
@@ -416,7 +416,7 @@ public class NetworkService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error attaching pre-handshake DATA session");
+            logger.LogError(ex, "绑定预握手 DATA 会话时出错");
             return null;
         }
     }
@@ -440,11 +440,11 @@ public class NetworkService(
         }
         catch (JsonException jsonEx)
         {
-            logger.Error($"Error parsing JSON message: {jsonEx.Message}");
+            logger.Error($"解析 JSON 消息时出错：{jsonEx.Message}");
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error dispatching payload");
+            logger.LogError(ex, "分发载荷时出错");
         }
     }
 
@@ -491,7 +491,7 @@ public class NetworkService(
         }
         catch (Exception ex)
         {
-            logger.LogDebug(ex, "Failed to parse Notify-Relay notification payload");
+            logger.LogDebug(ex, "解析 Notify-Relay 通知载荷失败");
             return false;
         }
     }
@@ -507,7 +507,7 @@ public class NetworkService(
         }
         catch (Exception ex)
         {
-            logger.Error($"Error in Disconnecting: {ex.Message}");
+            logger.Error($"断开连接时出错：{ex.Message}");
         }
     }
 
@@ -519,7 +519,7 @@ public class NetworkService(
         App.MainWindow.DispatcherQueue.EnqueueAsync(() =>
         {
             device.Session = null;
-            logger.LogDebug($"Session detached for device {device.Name}");
+            logger.LogDebug($"设备 {device.Name} 的会话已解绑");
         });
     }
 

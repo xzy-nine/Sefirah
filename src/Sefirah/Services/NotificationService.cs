@@ -158,7 +158,7 @@ public class NotificationService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error handling notification message");
+            logger.LogError(ex, "处理通知消息时出错");
         }
     }
 
@@ -171,7 +171,7 @@ public class NotificationService(
             if (!notification.Pinned)
             {
                 dispatcher.EnqueueAsync(() => notifications.Remove(notification));
-                logger.LogDebug("Removed notification with key: {NotificationKey} from device {DeviceId}", notification, device.Id);
+                logger.LogDebug("已从设备 {DeviceId} 移除通知：{NotificationKey}", device.Id, notification);
 
                 notificationRepository.DeleteNotification(device.Id, notification.Key);
 
@@ -197,7 +197,7 @@ public class NotificationService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error removing notification");
+            logger.LogError(ex, "移除通知时出错");
         }
     }
 
@@ -234,11 +234,11 @@ public class NotificationService(
             var command = new CommandMessage { CommandType = CommandType.ClearNotifications };
             string jsonMessage = SocketMessageSerializer.Serialize(command);
             sessionManager.SendMessage(activeDevice.Session, jsonMessage);
-            logger.LogInformation("Cleared all notifications for device {DeviceId}", activeDevice.Id);
+            logger.LogInformation("已清除设备 {DeviceId} 的全部通知", activeDevice.Id);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error clearing all notifications");
+            logger.LogError(ex, "清除全部通知时出错");
         }
     }
 
@@ -257,7 +257,7 @@ public class NotificationService(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error clearing history");
+                logger.LogError(ex, "清除通知历史时出错");
             }
         });
     }
@@ -295,7 +295,7 @@ public class NotificationService(
         if (device.Session is null) return;
 
         sessionManager.SendMessage(device.Session, SocketMessageSerializer.Serialize(replyAction));
-        logger.LogDebug("Sent reply action for notification {NotificationKey} to device {DeviceId}", notificationKey, device.Id);
+        logger.LogDebug("已向设备 {DeviceId} 发送回复动作（通知键：{NotificationKey}）", device.Id, notificationKey);
     }
 
     public void ProcessClickAction(PairedDevice device, string notificationKey, int actionIndex)
@@ -310,7 +310,7 @@ public class NotificationService(
         if (device.Session is null) return;
 
         sessionManager.SendMessage(device.Session, SocketMessageSerializer.Serialize(notificationAction));
-        logger.LogDebug("Sent click action for notification {NotificationKey} to device {DeviceId}", notificationKey, device.Id);
+        logger.LogDebug("已向设备 {DeviceId} 发送点击动作（通知键：{NotificationKey}）", device.Id, notificationKey);
     }
 
     private void UpdateActiveNotifications(PairedDevice activeDevice)
@@ -384,7 +384,7 @@ public class NotificationService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error loading notifications for device {DeviceId}", device.Id);
+            logger.LogError(ex, "加载设备 {DeviceId} 的通知时出错", device.Id);
         }
     }
 
@@ -403,7 +403,7 @@ public class NotificationService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error clearing badge number at startup");
+            logger.LogError(ex, "启动时清除角标失败");
         }
     }
 
@@ -420,7 +420,7 @@ public class NotificationService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error checking if app '{AppName}' is active", appName);
+            logger.LogError(ex, "检查应用 '{AppName}' 是否处于活动状态时出错", appName);
             return false;
         }
     }

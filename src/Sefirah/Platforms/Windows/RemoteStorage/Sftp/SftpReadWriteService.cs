@@ -21,7 +21,7 @@ public class SftpReadWriteService(
             throw new Exception("Conflict: already exists???");
         }
 
-        logger.LogDebug("Create File {relativeFile}", relativeFile);
+        logger.LogDebug("创建文件：{relativeFile}", relativeFile);
         PathMapper.EnsureSubDirectoriesExist(serverFile);
 
         using (var sourceStream = await FileHelper.WaitUntilUnlocked(sourceFileInfo.OpenRead, logger))
@@ -50,7 +50,7 @@ public class SftpReadWriteService(
             return;
         }
 
-        logger.LogDebug("Update File {relativeFile}", relativeFile);
+        logger.LogDebug("更新文件：{relativeFile}", relativeFile);
         using (var sourceStream = sourceFileInfo.OpenRead())
         {
             await Task.Factory.FromAsync(client.BeginUploadFile(sourceStream, serverFile), client.EndUploadFile);
@@ -73,7 +73,7 @@ public class SftpReadWriteService(
     public void DeleteFile(string relativeFile)
     {
         var serverFile = GetSftpPath(relativeFile);
-        logger.LogDebug("Delete File {file}", serverFile);
+        logger.LogDebug("删除文件：{file}", serverFile);
         client.DeleteFile(serverFile);
         DeleteDirectoryIfEmpty(serverFile);
     }
@@ -105,7 +105,7 @@ public class SftpReadWriteService(
     {
         var oldServerDirectory = GetSftpPath(oldRelativeDirectory);
         var newServerDirectory = GetSftpPath(newRelativeDirectory);
-        logger.LogDebug("Move Directory {old} -> {new}", oldServerDirectory, newServerDirectory);
+        logger.LogDebug("移动目录：{old} -> {new}", oldServerDirectory, newServerDirectory);
         var sftpFile = client.Get(oldServerDirectory);
         sftpFile.MoveTo(newServerDirectory);
     }
@@ -113,7 +113,7 @@ public class SftpReadWriteService(
     public void DeleteDirectory(string relativeDirectory)
     {
         var serverDirectory = GetSftpPath(relativeDirectory);
-        logger.LogDebug("Delete Directory {directory}", serverDirectory);
+        logger.LogDebug("删除目录：{directory}", serverDirectory);
 
         foreach (ISftpFile sftpFile in client.ListDirectory(serverDirectory))
         {

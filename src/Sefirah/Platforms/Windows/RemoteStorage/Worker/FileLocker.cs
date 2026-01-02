@@ -32,7 +32,7 @@ public sealed class FileLocker(ILogger logger) : IDisposable
         {
             if (!_lockers.TryGetValue(relativePath, out var semaphore))
             {
-                logger.LogWarning("Could not find semaphore for {relativePath}", relativePath);
+                logger.LogWarning("未找到用于 {relativePath} 的信号量", relativePath);
                 return;
             }
             var freed = semaphore.Release();

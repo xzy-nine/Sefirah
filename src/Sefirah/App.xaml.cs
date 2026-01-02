@@ -227,5 +227,5 @@ public partial class App : Application
 #endif
 
     private void OnNavigationFailed(object sender, NavigationFailedEventArgs e)
-        => new Exception("Failed to load Page " + e.SourcePageType.FullName);
+            => new Exception("加载页面失败：" + e.SourcePageType.FullName);
 }

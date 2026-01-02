@@ -24,7 +24,7 @@ public sealed class SyncRootConnector(
 
     public CF_CONNECTION_KEY Connect()
     {
-        logger.LogDebug("Connecting sync provider to {syncRootPath}", _rootDirectory);
+        logger.LogDebug("正在将同步提供程序连接到 {syncRootPath}", _rootDirectory);
         CallbackRegistrations = CloudFilter.ConnectSyncRoot(
             _rootDirectory,
             new SyncRootEvents
@@ -55,13 +55,13 @@ public sealed class SyncRootConnector(
 
     public void Disconnect(CF_CONNECTION_KEY connectionKey)
     {
-        logger.LogDebug("Disconnecting sync provider, {connectionKey}", connectionKey);
+        logger.LogDebug("正在断开同步提供程序：{connectionKey}", connectionKey);
         CloudFilter.DisconnectSyncRoot(connectionKey);
     }
 
     private void FetchPlaceholders(in CF_CALLBACK_INFO callbackInfo, in CF_CALLBACK_PARAMETERS callbackParameters)
     {
-        logger.LogDebug("Fetch Placeholders '{path}' '{pattern}' Flags: {flags}", 
+        logger.LogDebug("获取占位符 '{path}' '{pattern}' 标志: {flags}", 
             callbackInfo.NormalizedPath, 
             callbackParameters.FetchPlaceholders.Pattern,
             callbackParameters.FetchPlaceholders.Flags);
@@ -79,7 +79,7 @@ public sealed class SyncRootConnector(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error transferring placeholders");
+            logger.LogError(ex, "传输占位符时出错");
         }
     }
     
@@ -94,14 +94,14 @@ public sealed class SyncRootConnector(
             var clientRelativePath = PathMapper.GetRelativePath(clientFile, _rootDirectory);
             if (!remoteService.Exists(clientRelativePath))
             {
-                logger.LogInformation("Deleting local file (not on remote): {path}", clientRelativePath);
+                logger.LogInformation("删除本地文件（远端不存在）：{path}", clientRelativePath);
                 try
                 {
                     File.Delete(clientFile);
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "Failed to delete local file {path}: {error}", clientRelativePath, ex.Message);
+                    logger.LogError(ex, "删除本地文件失败：{path}，错误：{error}", clientRelativePath, ex.Message);
                 }
             }            
         }
@@ -117,14 +117,14 @@ public sealed class SyncRootConnector(
             
             if (!remoteService.Exists(clientRelativePath))
             {
-                logger.LogInformation("Deleting local directory (not on remote): {path}", clientRelativePath);
+                logger.LogInformation("删除本地目录（远端不存在）：{path}", clientRelativePath);
                 try
                 {
                     Directory.Delete(clientDir, recursive: true);
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "Failed to delete local directory {path}: {error}", clientRelativePath, ex.Message);
+                    logger.LogError(ex, "删除本地目录失败：{path}，错误：{error}", clientRelativePath, ex.Message);
                 }
             }
             else
@@ -181,7 +181,7 @@ public sealed class SyncRootConnector(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to transfer server->client");
+            logger.LogError(ex, "Server->Client 传输失败");
 
             CloudFilter.TransferData(
                 callbackInfo,
@@ -195,12 +195,12 @@ public sealed class SyncRootConnector(
 
     private void OnCloseCompletion(in CF_CALLBACK_INFO callbackInfo, in CF_CALLBACK_PARAMETERS callbackParameters)
     {
-        //logger.Debug("SyncRoot CloseCompletion {path} {flags}", callbackInfo.NormalizedPath, callbackParameters.CloseCompletion.Flags);
+        //logger.Debug("SyncRoot 关闭完成：{path} {flags}", callbackInfo.NormalizedPath, callbackParameters.CloseCompletion.Flags);
     }
 
     private async Task OnRenameCompletion(string volumeDosName, string oldPath, string newPath)
     {
-        logger.LogDebug("SyncRoot Rename {old} -> {new}", oldPath, newPath);
+        logger.LogDebug("SyncRoot 重命名：{old} -> {new}", oldPath, newPath);
         var oldClientPath = Path.Join(volumeDosName, oldPath[1..]);
         var oldRelativePath = PathMapper.GetRelativePath(oldClientPath, _rootDirectory);
         var newClientPath = Path.Join(volumeDosName, newPath[1..]);
@@ -237,23 +237,23 @@ public sealed class SyncRootConnector(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Rename server object failed");
+            logger.LogError(ex, "重命名服务器对象失败");
         }
     }
 
     private async Task OnDeleteCompletion(string volumeDosName, string path)
     {
-        logger.LogDebug("SyncRoot Delete {path}", path);
+        logger.LogDebug("SyncRoot 删除：{path}", path);
         var clientPath = Path.Join(volumeDosName, path[1..]);
         // For files created in client, sometimes it's not actually deleted yet. Wait until it's really gone.
         for (var attempt = 0; attempt < 60 && Path.Exists(clientPath); attempt++)
         {
-            logger.LogDebug("File has not yet been deleted, waiting before retry");
+            logger.LogDebug("文件尚未被删除，稍后重试");
             await Task.Delay(500);
         }
         if (Path.Exists(clientPath))
         {
-            logger.LogWarning("Received delete completion, but file has not been deleted: {clientPath}", clientPath);
+            logger.LogWarning("收到删除完成，但文件未删除：{clientPath}", clientPath);
             return;
         }
         var relativePath = PathMapper.GetRelativePath(clientPath, _rootDirectory);
@@ -275,7 +275,7 @@ public sealed class SyncRootConnector(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Delete server object failed");
+            logger.LogError(ex, "删除服务端对象失败");
         }
     }
 }

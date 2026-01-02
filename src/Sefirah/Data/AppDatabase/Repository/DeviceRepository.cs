@@ -12,7 +12,7 @@ public class DeviceRepository(DatabaseContext context, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError("Failed to get local devices {ex}", ex);
+            logger.LogError(ex, "获取本地设备失败：{ex}");
             return null;
         }
     }
@@ -25,7 +25,7 @@ public class DeviceRepository(DatabaseContext context, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError("Failed to add local device {ex}", ex);
+            logger.LogError(ex, "添加本地设备失败：{ex}");
         }
     }
 
@@ -50,7 +50,7 @@ public class DeviceRepository(DatabaseContext context, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError("Failed to get last connected device {ex}", ex);
+            logger.LogError(ex, "获取最后连接的设备失败：{ex}");
             return null;
         }
     }
@@ -67,7 +67,7 @@ public class DeviceRepository(DatabaseContext context, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to get paired devices");
+            logger.LogError(ex, "获取配对设备失败");
             return [];
         }
     }

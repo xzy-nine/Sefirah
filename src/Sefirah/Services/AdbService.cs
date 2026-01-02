@@ -86,7 +86,7 @@ public class AdbService(
 
             // Start the ADB server if it's not running
             StartServerResult startServerResult = await AdbServer.Instance.StartServerAsync(adbPath, false, cts.Token);
-            logger.LogInformation($"ADB server start result: {startServerResult}");
+            logger.LogInformation($"ADB 服务启动结果：{startServerResult}");
             
             // Create and configure the device monitor
             deviceMonitor = new DeviceMonitor(new AdbSocket(new IPEndPoint(IPAddress.Loopback, AdbClient.AdbServerPort)));
@@ -102,12 +102,12 @@ public class AdbService(
             // Get initial list of devices
             await RefreshDevicesAsync();
             
-            logger.LogInformation("ADB device monitoring started successfully");
+            logger.LogInformation("ADB 设备监控已成功启动");
         }
         catch (Exception ex)
         {
             await CleanupAsync();
-            logger.LogError("Failed to start ADB device monitoring: {ex}", ex);
+            logger.LogError("启动 ADB 设备监控失败：{ex}", ex);
         }
     }
     
@@ -115,12 +115,12 @@ public class AdbService(
     {
         if (!IsMonitoring)
         {
-            logger.LogWarning("ADB monitoring is not running");
+            logger.LogWarning("ADB 监控未在运行");
             return;
         }
         
         await CleanupAsync();
-        logger.LogInformation("ADB device monitoring stopped");
+        logger.LogInformation("ADB 设备监控已停止");
     }
     
     private async Task CleanupAsync()
@@ -154,7 +154,7 @@ public class AdbService(
             // get the rudimentary data if it isn't online yet
             if (e.Device.State != DeviceState.Online)
             {
-                logger.LogInformation($"Device {e.Device.Serial} connected but not yet online. Current state: {e.Device.State}");
+                logger.LogInformation($"设备 {e.Device.Serial} 已连接，但尚未在线，当前状态：{e.Device.State}");
 
                 var adbDevice = new AdbDevice
                 {
@@ -180,17 +180,17 @@ public class AdbService(
             {
                 AdbDevices.Add(connectedDevice);
             });
-            logger.LogInformation($"Device connected: {connectedDevice.Model} ({connectedDevice.Serial})");
+            logger.LogInformation($"设备已连接：{connectedDevice.Model} ({connectedDevice.Serial})");
         }
         catch (Exception ex)
         {
-            logger.LogError($"Error handling device connection for {e.Device.Serial}: {ex.Message}", ex);
+            logger.LogError($"处理设备连接时出错 {e.Device.Serial}：{ex.Message}", ex);
         }
     }
     
     private async void DeviceDisconnected(object? sender, DeviceDataEventArgs e)
     {
-        logger.LogInformation($"Device disconnected: {e.Device.Serial}");
+        logger.LogInformation($"设备已断开：{e.Device.Serial}");
         var existingDevice = AdbDevices.FirstOrDefault(d => d.Serial == e.Device.Serial);
         if (existingDevice != null)
         {
@@ -208,7 +208,7 @@ public class AdbService(
     private async void DeviceChanged(object? sender, DeviceDataChangeEventArgs e)
     {
 
-        logger.LogInformation($"Device state changed: {e.Device.Serial} {e.OldState} -> {e.NewState}");
+        logger.LogInformation($"设备状态已更改：{e.Device.Serial} {e.OldState} -> {e.NewState}");
         var existingDevice = AdbDevices.FirstOrDefault(d => d.Serial == e.Device.Serial);
             
         if (e.NewState == DeviceState.Online)
@@ -224,18 +224,18 @@ public class AdbService(
                     if (index != -1)
                     {
                         AdbDevices[index] = deviceInfo;
-                        logger.LogInformation($"Device updated: {deviceInfo.Model} ({deviceInfo.Serial})");
+                        logger.LogInformation($"设备已更新：{deviceInfo.Model} ({deviceInfo.Serial})");
                     }
                 }
                 else
                 {
                     // Only add if device doesn't exist
                     AdbDevices.Add(deviceInfo);
-                    logger.LogInformation($"Device added: {deviceInfo.Model} ({deviceInfo.Serial})");
+                    logger.LogInformation($"设备已添加：{deviceInfo.Model} ({deviceInfo.Serial})");
                 }
             });
                 
-            logger.LogInformation($"Device connected: {deviceInfo.Model} ({deviceInfo.Serial})");
+            logger.LogInformation($"设备已连接：{deviceInfo.Model} ({deviceInfo.Serial})");
         }
         else
         {
@@ -260,7 +260,7 @@ public class AdbService(
         var devices = await adbClient.GetDevicesAsync();
         if (devices.Any())
         {
-            logger.LogWarning("No devices found");
+            logger.LogWarning("未找到设备");
             await App.MainWindow.DispatcherQueue.EnqueueAsync(() =>
             {
                 AdbDevices.Clear();
@@ -321,7 +321,7 @@ public class AdbService(
             }
             catch (Exception ex)
             {
-                logger.LogError($"Error getting Android ID for {deviceData.Serial}", ex);
+                logger.LogError(ex, $"获取 Android ID 时出错：{deviceData.Serial}");
             }
 
             // Look for paired devices with matching model
@@ -342,7 +342,7 @@ public class AdbService(
                 }
                 else
                 {
-                    logger.LogWarning($"No matching paired device found for model: {deviceModel}");
+                    logger.LogWarning($"未找到与型号匹配的配对设备：{deviceModel}");
                     androidId = string.Empty;
                 }
             }
@@ -361,7 +361,7 @@ public class AdbService(
         }
         catch (Exception ex)
         {
-            logger.LogError($"Error getting full device info for {deviceData.Serial}", ex);
+            logger.LogError(ex, $"获取完整设备信息时出错：{deviceData.Serial}");
             // Return basic information if we can't get full details
             var device = new AdbDevice
             {
@@ -393,7 +393,7 @@ public class AdbService(
         }
         catch (Exception ex)
         {
-            logger.LogError("Error connecting to default wireless device: {ex}", ex);
+            logger.LogError(ex, "连接默认无线设备时出错：{ex}");
             return false;
         }
     }
@@ -413,7 +413,7 @@ public class AdbService(
         }
         catch (Exception ex)
         {
-            logger.LogError("Error connecting to wireless device {device.Serial}: {ex}", device.Serial, ex);
+            logger.LogError(ex, "连接无线设备 {device} 时出错：{ex}", device.Serial, ex);
             return false;
         }
     }
@@ -422,20 +422,20 @@ public class AdbService(
     {
         try
         {
-            logger.LogInformation("Unlocking device");
+            logger.LogInformation("正在解锁设备");
             if (await IsLocked(deviceData))
             {
                 foreach (var command in commands)
                 {
-                    logger.LogInformation("Executing command: {command}", command);
+                    logger.LogInformation("执行命令：{command}", command);
                     await adbClient.ExecuteShellCommandAsync(deviceData, command);
                     await Task.Delay(250);
                 }
             }
         }
         catch (Exception ex)
-        { 
-            logger.LogError("Error unlocking device: {ex}", ex);
+        {
+            logger.LogError(ex, "解锁设备时出错：{ex}", ex);
         }
     }
 
@@ -448,7 +448,7 @@ public class AdbService(
 
     public async Task UninstallApp(string deviceId, string appPackage)
     {
-        logger.LogInformation("Uninstalling app {appPackage} from {deviceId}", appPackage, deviceId);
+        logger.LogInformation("正在从设备 {deviceId} 卸载应用 {appPackage}", appPackage, deviceId);
 
         var adbDevice = AdbDevices.FirstOrDefault(d => d.AndroidId == deviceId);
         if (adbDevice?.DeviceData == null) return;
@@ -467,11 +467,11 @@ public class AdbService(
             string adbPath = userSettingsService.GeneralSettingsService.AdbPath;
             if (string.IsNullOrEmpty(adbPath))
             {
-                logger.LogError("ADB path not configured");
+                logger.LogError("ADB 路径未配置");
                 return false;
             }
 
-            logger.LogInformation("Enabling TCP/IP mode using ADB at: {AdbPath}", adbPath);
+            logger.LogInformation("正在使用 ADB（{AdbPath}）启用 TCP/IP 模式", adbPath);
             
             // Run "adb tcpip 5555" to enable TCP/IP mode
             var processInfo = new ProcessStartInfo
@@ -487,7 +487,7 @@ public class AdbService(
             using var process = Process.Start(processInfo);
             if (process == null)
             {
-                logger.LogError("Failed to start ADB process");
+                logger.LogError("启动 ADB 进程失败");
                 return false;
             }
 
@@ -497,7 +497,7 @@ public class AdbService(
             
             if (!string.IsNullOrEmpty(error))
             {
-                logger.LogWarning("ADB tcpip command error: {Error}", error);
+                logger.LogWarning("ADB tcpip 命令出错：{Error}", error);
             }
 
             // Restart our ADB client to pick up the changes
@@ -507,7 +507,7 @@ public class AdbService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to enable TCP/IP mode");
+            logger.LogError(ex, "启用 TCP/IP 模式失败");
             return false;
         }
     }
@@ -519,7 +519,7 @@ public class AdbService(
     {
         try
         {
-            logger.LogInformation("Restarting ADB client");
+            logger.LogInformation("正在重启 ADB 客户端");
             var wasMonitoring = IsMonitoring;
             if (wasMonitoring)
             {
@@ -531,11 +531,11 @@ public class AdbService(
             {
                 await StartAsync();
             }
-            logger.LogInformation("ADB client restarted successfully");
+            logger.LogInformation("ADB 客户端重启成功");
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to restart ADB client");
+            logger.LogError(ex, "重启 ADB 客户端失败");
         }
     }
 
@@ -546,7 +546,7 @@ public class AdbService(
             var result = await ConnectWireless(host);
             if (result)
             {
-                logger.LogInformation("Successfully connected to {Host}", host);
+                logger.LogInformation("成功连接到 {Host}", host);
             }
 
             if (AdbDevices.FirstOrDefault(d => d.Type == DeviceType.USB) == null) return;
@@ -555,7 +555,7 @@ public class AdbService(
             var tcpipEnabled = await EnableTcpipMode();
             if (!tcpipEnabled)
             {
-                logger.LogError("Failed to enable TCP/IP mode");
+                logger.LogError("启用 TCP/IP 模式失败");
                 return;
             }
 
@@ -565,16 +565,16 @@ public class AdbService(
             result = await ConnectWireless(host);
             if (result)
             {
-                logger.LogInformation("Successfully connected to {Host} after enabling TCP/IP mode", host);
+                logger.LogInformation("启用 TCP/IP 模式后成功连接到 {Host}", host);
                 return;
             }
 
-            logger.LogError("TCP/IP connection still failed after enabling TCP/IP mode");
+            logger.LogError("启用 TCP/IP 模式后 TCP/IP 连接仍然失败");
             return;
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error in TryConnectTcp for {Host}", host);
+            logger.LogError(ex, "尝试连接 {Host} 时发生错误", host);
             return;
         }
     }

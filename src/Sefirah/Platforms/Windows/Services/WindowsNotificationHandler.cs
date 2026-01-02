@@ -76,7 +76,7 @@ public class WindowsNotificationHandler(ILogger logger, ISessionManager sessionM
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to show remote notification");
+            logger.LogError(ex, "显示远程通知失败");
         }
     }
 
@@ -129,7 +129,7 @@ public class WindowsNotificationHandler(ILogger logger, ISessionManager sessionM
         }
         catch (Exception ex)
         {
-            logger.Error($"Notification failed, Progress: {progress}, Sequence: {notificationSequence}", ex);
+            logger.Error($"通知失败，进度：{progress}, 序列：{notificationSequence}", ex);
         }
     }
 
@@ -169,7 +169,7 @@ public class WindowsNotificationHandler(ILogger logger, ISessionManager sessionM
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to show file transfer notification");
+            logger.LogError(ex, "显示文件传输通知失败");
         }
     }
 
@@ -191,7 +191,7 @@ public class WindowsNotificationHandler(ILogger logger, ISessionManager sessionM
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to show simple notification");
+            logger.LogError(ex, "显示简单通知失败");
         }
     }
 
@@ -219,7 +219,7 @@ public class WindowsNotificationHandler(ILogger logger, ISessionManager sessionM
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to show clipboard notification");
+            logger.LogError(ex, "显示剪贴板通知失败");
         }
     }
 
@@ -235,7 +235,7 @@ public class WindowsNotificationHandler(ILogger logger, ISessionManager sessionM
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Could not register for notifications, continuing without notifications");
+            logger.LogWarning(ex, "无法注册通知，继续不显示通知");
         }
     }
 
@@ -243,7 +243,7 @@ public class WindowsNotificationHandler(ILogger logger, ISessionManager sessionM
     {
         try
         {
-            logger.LogInformation("Notification invoked - Arguments: {Arguments}", string.Join(", ", args.Arguments.Select(x => $"{x.Key}={x.Value}")));
+            logger.LogInformation("通知被触发 - 参数：{Arguments}", string.Join(", ", args.Arguments.Select(x => $"{x.Key}={x.Value}")));
 
             if (!args.Arguments.TryGetValue("notificationType", out var notificationType)) return;
             
@@ -262,13 +262,13 @@ public class WindowsNotificationHandler(ILogger logger, ISessionManager sessionM
                     break;
                 
                 default:
-                    logger.LogWarning("Unhandled notification type: {NotificationType}", notificationType);
+                    logger.LogWarning("未处理的通知类型：{NotificationType}", notificationType);
                     break;
             }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error handling notification action");
+            logger.LogError(ex, "处理通知操作时出错");
         }
     }
 

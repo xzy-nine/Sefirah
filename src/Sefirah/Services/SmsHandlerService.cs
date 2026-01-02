@@ -35,7 +35,7 @@ public class SmsHandlerService(
     {
         try
         {
-            logger.LogInformation("Loading conversations from database for device: {DeviceId}", deviceId);
+            logger.LogInformation("从数据库加载设备 {DeviceId} 的会话", deviceId);
             
             var conversationEntities = await smsRepository.GetConversationsAsync(deviceId);
             var conversations = GetConversationsForDevice(deviceId);
@@ -56,7 +56,7 @@ public class SmsHandlerService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error loading conversations from database for device: {DeviceId}", deviceId);
+            logger.LogError(ex, "从数据库加载设备 {DeviceId} 的会话时出错", deviceId);
         }
     }
 
@@ -83,7 +83,7 @@ public class SmsHandlerService(
                     break;
                     
                 default:
-                    logger.LogWarning("Unknown conversation type: {ConversationType}", textConversation.ConversationType);
+                    logger.LogWarning("未知对话类型：{ConversationType}", textConversation.ConversationType);
                     break;
             }
 
@@ -144,7 +144,7 @@ public class SmsHandlerService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error handling active/new conversation {ThreadId} for device {DeviceId}", textConversation.ThreadId, deviceId);
+            logger.LogError(ex, "处理设备 {DeviceId} 的会话 {ThreadId}（激活/新增）时出错", deviceId, textConversation.ThreadId);
         }
     }
 
@@ -173,7 +173,7 @@ public class SmsHandlerService(
                 var existingConversation = conversations.FirstOrDefault(c => c.ThreadId == textConversation.ThreadId);
                 if (existingConversation is not null)
                 {
-                    logger.LogInformation("Adding new messages to conversation: {ThreadId}", existingConversation.ThreadId);
+                    logger.LogInformation("向会话添加新消息：{ThreadId}", existingConversation.ThreadId);
                     existingConversation.LastMessageTimestamp = latestMessage.Timestamp;
                     existingConversation.LastMessage = latestMessage.Body;
                     await existingConversation.NewMessageFromConversationAsync(textConversation, smsRepository, deviceId);
@@ -183,7 +183,7 @@ public class SmsHandlerService(
                 }
                 else
                 {
-                    logger.LogInformation("Updated conversation not found in UI, creating new: {ThreadId}", textConversation.ThreadId);
+                    logger.LogInformation("UI 中未找到更新的会话，正在创建：{ThreadId}", textConversation.ThreadId);
                     var conversationEntity = SmsRepository.ToEntity(textConversation, deviceId);
                     var newConversation = await conversationEntity.ToConversationAsync(smsRepository);
                     SmsHandlerService.InsertOrMoveConversation(newConversation, conversations);
@@ -192,7 +192,7 @@ public class SmsHandlerService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error handling updated conversation {ThreadId} for device {DeviceId}", textConversation.ThreadId, deviceId);
+            logger.LogError(ex, "处理更新的会话 {ThreadId}（设备：{DeviceId}）时出错", textConversation.ThreadId, deviceId);
         }
     }
 
@@ -212,7 +212,7 @@ public class SmsHandlerService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error handling removed conversation {ThreadId} for device {DeviceId}", textConversation.ThreadId, deviceId);
+            logger.LogError(ex, "处理已移除的会话 {ThreadId}（设备：{DeviceId}）时出错", textConversation.ThreadId, deviceId);
         }
     }
 
@@ -232,7 +232,7 @@ public class SmsHandlerService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error saving messages for device {DeviceId}", deviceId);
+            logger.LogError(ex, "保存设备 {DeviceId} 的消息时出错", deviceId);
             return null;
         }
     }
@@ -255,7 +255,7 @@ public class SmsHandlerService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error loading messages for thread {ThreadId}, device {DeviceId}", threadId, deviceId);
+            logger.LogError(ex, "加载设备 {DeviceId} 会话 {ThreadId} 的消息时出错", deviceId, threadId);
             return [];
         }
     }
@@ -285,7 +285,7 @@ public class SmsHandlerService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error handling contact message {ContactId} for device {DeviceId}", 
+            logger.LogError(ex, "处理设备 {DeviceId} 的联系人消息 {ContactId} 时出错", 
                 contactMessage.Id, deviceId);
         }
     }

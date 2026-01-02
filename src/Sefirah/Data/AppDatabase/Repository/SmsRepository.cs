@@ -18,7 +18,7 @@ public class SmsRepository(DatabaseContext databaseContext, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error getting conversation for device {DeviceId}, thread {ThreadId}", deviceId, threadId);
+            logger.LogError(ex, "获取设备 {DeviceId} 会话 {ThreadId} 时出错", deviceId, threadId);
             return null;
         }
     }
@@ -35,7 +35,7 @@ public class SmsRepository(DatabaseContext databaseContext, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error getting conversations for device {DeviceId}", deviceId);
+            logger.LogError(ex, "获取设备 {DeviceId} 的会话列表时出错", deviceId);
             return [];
         }
     }
@@ -49,7 +49,7 @@ public class SmsRepository(DatabaseContext databaseContext, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error saving conversation {ThreadId} for device {DeviceId}", conversation.ThreadId, conversation.DeviceId);
+            logger.LogError(ex, "保存设备 {DeviceId} 的会话 {ThreadId} 时出错", conversation.DeviceId, conversation.ThreadId);
             return false;
         }
     }
@@ -71,7 +71,7 @@ public class SmsRepository(DatabaseContext databaseContext, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error deleting conversation {ThreadId} for device {DeviceId}", threadId, deviceId);
+            logger.LogError(ex, "删除设备 {DeviceId} 的会话 {ThreadId} 时出错", deviceId, threadId);
             return false;
         }
     }
@@ -92,7 +92,7 @@ public class SmsRepository(DatabaseContext databaseContext, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error getting messages for device {DeviceId}, thread {ThreadId}", deviceId, threadId);
+            logger.LogError(ex, "获取设备 {DeviceId} 会话 {ThreadId} 的消息时出错", deviceId, threadId);
             return [];
         }
     }
@@ -121,7 +121,7 @@ public class SmsRepository(DatabaseContext databaseContext, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error getting messages with attachments for device {DeviceId}, thread {ThreadId}", deviceId, threadId);
+            logger.LogError(ex, "获取带附件的消息（设备：{DeviceId}, 会话：{ThreadId}）时出错", deviceId, threadId);
             return [];
         }
     }
@@ -134,7 +134,7 @@ public class SmsRepository(DatabaseContext databaseContext, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error getting message {UniqueId} for device {DeviceId}", uniqueId, deviceId);
+            logger.LogError(ex, "获取设备 {DeviceId} 的消息 {UniqueId} 时出错", deviceId, uniqueId);
             return null;
         }
     }
@@ -148,7 +148,7 @@ public class SmsRepository(DatabaseContext databaseContext, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error saving message {UniqueId} for device {DeviceId}", message.UniqueId, message.DeviceId);
+            logger.LogError(ex, "保存设备 {DeviceId} 的消息 {UniqueId} 时出错", message.DeviceId, message.UniqueId);
             return false;
         }
     }
@@ -162,7 +162,7 @@ public class SmsRepository(DatabaseContext databaseContext, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error saving batch messages");
+            logger.LogError(ex, "保存批量消息时出错");
             return false;
         }
     }
@@ -180,7 +180,7 @@ public class SmsRepository(DatabaseContext databaseContext, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error deleting message {UniqueId} for device {DeviceId}", uniqueId, deviceId);
+            logger.LogError(ex, "删除设备 {DeviceId} 的消息 {UniqueId} 时出错", deviceId, uniqueId);
             return false;
         }
     }
@@ -200,7 +200,7 @@ public class SmsRepository(DatabaseContext databaseContext, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error getting contacts for device {DeviceId}", deviceId);
+            logger.LogError(ex, "获取设备 {DeviceId} 联系人时出错", deviceId);
             return [];
         }
     }
@@ -231,7 +231,7 @@ public class SmsRepository(DatabaseContext databaseContext, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error getting contact {PhoneNumber} for device {DeviceId}", phoneNumber, deviceId);
+            logger.LogError(ex, "获取设备 {DeviceId} 的联系人 {PhoneNumber} 时出错", deviceId, phoneNumber);
             return null;
         }
     }
@@ -246,7 +246,7 @@ public class SmsRepository(DatabaseContext databaseContext, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error getting contact by ID {ContactId} for device {DeviceId}", contactId, deviceId);
+            logger.LogError(ex, "根据 ID 获取设备 {DeviceId} 的联系人 {ContactId} 时出错", deviceId, contactId);
             return null;
         }
     }
@@ -260,7 +260,7 @@ public class SmsRepository(DatabaseContext databaseContext, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error saving contact {PhoneNumber} for device {DeviceId}", contact.Number, contact.DeviceId);
+            logger.LogError(ex, "保存设备 {DeviceId} 的联系人 {PhoneNumber} 时出错", contact.DeviceId, contact.Number);
             return false;
         }
     }
@@ -274,7 +274,7 @@ public class SmsRepository(DatabaseContext databaseContext, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error saving batch contacts");
+            logger.LogError(ex, "保存批量联系人时出错");
             return false;
         }
     }
@@ -294,7 +294,7 @@ public class SmsRepository(DatabaseContext databaseContext, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError("Error getting attachments for message {MessageUniqueId}, device {DeviceId}", messageUniqueId, ex);
+            logger.LogError(ex, "获取消息附件（MessageUniqueId：{MessageUniqueId}）时出错", messageUniqueId);
             return [];
         }
     }
@@ -308,7 +308,7 @@ public class SmsRepository(DatabaseContext databaseContext, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError("Error saving attachment for message {MessageUniqueId}, device {DeviceId}",attachment.MessageUniqueId, ex);
+            logger.LogError(ex, "保存消息附件（MessageUniqueId：{MessageUniqueId}）时出错", attachment.MessageUniqueId);
             return false;
         }
     }
@@ -322,7 +322,7 @@ public class SmsRepository(DatabaseContext databaseContext, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error saving batch attachments");
+            logger.LogError(ex, "保存批量附件时出错");
             return false;
         }
     }

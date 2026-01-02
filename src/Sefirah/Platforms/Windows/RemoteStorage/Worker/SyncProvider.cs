@@ -48,6 +48,6 @@ public class SyncProvider(
 
         await taskQueue.Stop();
 
-        logger.LogDebug("Disconnecting...");
+        logger.LogDebug("断开连接...");
     }
 }

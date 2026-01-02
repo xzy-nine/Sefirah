@@ -64,7 +64,7 @@ public sealed partial class TrayIconControl : UserControl
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Failed to detect theme: {ex.Message}");
+            Debug.WriteLine($"检测主题失败：{ex.Message}");
         }
     }
 

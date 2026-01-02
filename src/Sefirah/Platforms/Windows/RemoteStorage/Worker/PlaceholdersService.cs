@@ -92,7 +92,7 @@ public class PlaceholdersService(
             out var entriesProcessed
         ).ThrowIfFailed("Create placeholder failed");
 
-        logger.LogInformation("Created placeholder file for {path}", relativeFile);
+        logger.LogInformation("已为 {path} 创建占位文件", relativeFile);
     }
 
     public async Task CreateDirectory(string relativeDirectory)
@@ -105,7 +105,7 @@ public class PlaceholdersService(
         // If it's already a placeholder, just update it
         if (CloudFilter.IsPlaceholder(targetPath))
         {
-            logger.LogInformation("Directory is already a placeholder, updating {path}", relativeDirectory);
+            logger.LogInformation("目录已作为占位符，正在更新 {path}", relativeDirectory);
             await UpdateDirectory(relativeDirectory);
             return;
         }
@@ -122,11 +122,11 @@ public class PlaceholdersService(
                 out var entriesProcessed
             ).ThrowIfFailed("Create placeholder failed");
 
-            logger.LogInformation("Created placeholder for {path}", relativeDirectory);
+            logger.LogInformation("已为 {path} 创建占位符", relativeDirectory);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to create placeholder for {path}: {error}", relativeDirectory, ex.Message);
+            logger.LogError(ex, "创建占位符失败：{path}，错误：{error}", relativeDirectory, ex.Message);
             throw;
         }
     }
@@ -143,7 +143,7 @@ public class PlaceholdersService(
         var clientFile = Path.Join(rootDirectory, relativeFile);
         if (!Path.Exists(clientFile))
         {
-            //logger.Info("Skip update; file does not exist {clientFile}", clientFile);
+            //logger.Info("跳过更新：文件不存在 {clientFile}", clientFile);
             return;
         }
         var clientFileInfo = new FileInfo(clientFile);
@@ -165,7 +165,7 @@ public class PlaceholdersService(
         var remoteFileInfo = remoteService.GetFileInfo(relativeFile);
         if (!force && remoteFileInfo.GetHashCode() == _fileComparer.GetHashCode(clientFileInfo))
         {
-            //logger.Info("UpdateFile - equal, ignoring {relativeFile}", relativeFile);
+            //logger.Info("更新占位文件 - 相同，忽略 {relativeFile}", relativeFile);
             if (!placeholderState.HasFlag(CldApi.CF_PLACEHOLDER_STATE.CF_PLACEHOLDER_STATE_IN_SYNC))
             {
                 CloudFilter.SetInSyncState(hfile);
@@ -173,7 +173,7 @@ public class PlaceholdersService(
             return;
         }
 
-        logger.LogInformation("UpdateFile - update placeholder {relativeFile}", relativeFile);
+        logger.LogInformation("更新占位文件：{relativeFile}", relativeFile);
         var pinned = clientFileInfo.Attributes.HasAnySyncFlag(SyncAttributes.PINNED);
         if (pinned)
         {
@@ -201,7 +201,7 @@ public class PlaceholdersService(
         var clientDirectory = Path.Join(rootDirectory, relativeDirectory);
         if (!Path.Exists(clientDirectory))
         {
-            //logger.Warn("Skip update; directory does not exist {clientDirectory}", clientDirectory);
+            //logger.Warn("跳过更新：目录不存在 {clientDirectory}", clientDirectory);
             return Task.CompletedTask;
         }
 
@@ -213,12 +213,12 @@ public class PlaceholdersService(
         // Only update placeholder state if directory is a hydrated directory
         if (isHydrated)
         {
-            logger.LogInformation("Directory {path} is hydrated", relativeDirectory);
+            logger.LogInformation("目录 {path} 已还原", relativeDirectory);
             if (!CloudFilter.IsPlaceholder(clientDirectory))
             {
                 CloudFilter.ConvertToPlaceholder(clientDirectory);
                 CloudFilter.SetInSyncState(clientDirectory);
-                logger.LogInformation("Converted to placeholder and updated {path}", relativeDirectory);
+                logger.LogInformation("已转换为占位符并更新：{path}", relativeDirectory);
                 return Task.CompletedTask;
             }
             CloudFilter.SetInSyncState(clientDirectory);

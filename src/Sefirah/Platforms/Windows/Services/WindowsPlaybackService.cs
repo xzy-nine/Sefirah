@@ -35,7 +35,7 @@ public class WindowsPlaybackService(
             manager = await GlobalSystemMediaTransportControlsSessionManager.RequestAsync();
             if (manager is null)
             {
-                logger.LogError("Failed to initialize GlobalSystemMediaTransportControlsSessionManager");
+                logger.LogError("初始化系统媒体传输控制会话管理器失败");
                 return;
             }
 
@@ -63,11 +63,11 @@ public class WindowsPlaybackService(
                 }
             };
 
-            logger.LogInformation("PlaybackService initialized successfully");
+            logger.LogInformation("播放服务初始化成功");
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to initialize PlaybackService");
+            logger.LogError(ex, "初始化播放服务失败");
         }
     }
 
@@ -135,13 +135,13 @@ public class WindowsPlaybackService(
                         ToggleMute(mediaAction.Source);
                         break;
                     default:
-                        logger.LogWarning("Unhandled media action: {PlaybackActionType}", mediaAction.PlaybackActionType);
+                        logger.LogWarning("未处理的媒体操作：{PlaybackActionType}", mediaAction.PlaybackActionType);
                         break;
                 }
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error executing media action {PlaybackActionType}", mediaAction.PlaybackActionType);
+                logger.LogError(ex, "执行媒体操作时出错：{PlaybackActionType}", mediaAction.PlaybackActionType);
             }
         });
     }
@@ -162,7 +162,7 @@ public class WindowsPlaybackService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error updating active sessions");
+            logger.LogError(ex, "更新活动会话时出错");
         }
     }
 
@@ -244,7 +244,7 @@ public class WindowsPlaybackService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error processing timeline properties for {SourceAppUserModelId}", sender.SourceAppUserModelId);
+            logger.LogError(ex, "处理时间线属性时出错：{SourceAppUserModelId}", sender.SourceAppUserModelId);
         }
     }
 
@@ -267,13 +267,13 @@ public class WindowsPlaybackService(
     {
         try
         {
-            logger.LogInformation("Media properties changed for {SourceAppUserModelId}", sender.SourceAppUserModelId);
+            logger.LogInformation("媒体属性已变更：{SourceAppUserModelId}", sender.SourceAppUserModelId);
             await UpdatePlaybackDataAsync(sender);
 
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error updating playback data for {SourceAppUserModelId}", sender.SourceAppUserModelId);
+            logger.LogError(ex, "更新播放数据时出错：{SourceAppUserModelId}", sender.SourceAppUserModelId);
         }
     }
 
@@ -295,7 +295,7 @@ public class WindowsPlaybackService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error updating playback data for {SourceAppUserModelId}", sender.SourceAppUserModelId);
+            logger.LogError(ex, "更新播放数据时出错：{SourceAppUserModelId}", sender.SourceAppUserModelId);
         }
     }
 
@@ -314,7 +314,7 @@ public class WindowsPlaybackService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error updating playback data for {SourceAppUserModelId}", session.SourceAppUserModelId);
+            logger.LogError(ex, "更新播放数据时出错：{SourceAppUserModelId}", session.SourceAppUserModelId);
         }
     }
 
@@ -350,7 +350,7 @@ public class WindowsPlaybackService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error getting playback data for {SourceAppUserModelId}", session.SourceAppUserModelId);
+            logger.LogError(ex, "获取播放数据时出错：{SourceAppUserModelId}", session.SourceAppUserModelId);
             return null;
         }
     }
@@ -371,7 +371,7 @@ public class WindowsPlaybackService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error sending playback data");
+            logger.LogError(ex, "发送播放数据时出错");
         }
     }
 
@@ -405,7 +405,7 @@ public class WindowsPlaybackService(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to enumerate audio devices");
+            logger.LogWarning(ex, "枚举音频设备失败");
         }
     }
 
@@ -422,12 +422,12 @@ public class WindowsPlaybackService(
             }
             catch (COMException comEx) when (comEx.HResult == unchecked((int)0x8007001F))
             {
-                logger.LogWarning("Device {DeviceId} not functioning when muting", deviceId);
+                logger.LogWarning("设备 {DeviceId} 在静音时无法正常工作", deviceId);
             }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error muting device {DeviceId}", deviceId);
+            logger.LogError(ex, "静音设备 {DeviceId} 时出错", deviceId);
         }
     }
 
@@ -444,12 +444,12 @@ public class WindowsPlaybackService(
             }
             catch (COMException comEx) when (comEx.HResult == unchecked((int)0x8007001F))
             {
-                logger.LogWarning("Device {DeviceId} not functioning when setting volume", deviceId);
+                logger.LogWarning("设备 {DeviceId} 在设置音量时无法正常工作", deviceId);
             }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error setting volume to {Volume} for device {DeviceId}", volume, deviceId);
+            logger.LogError(ex, "为设备 {DeviceId} 设置音量 {Volume} 时出错", volume, deviceId);
         }
     }
 
@@ -473,7 +473,7 @@ public class WindowsPlaybackService(
 
             if (result1 != HResult.S_OK || result2 != HResult.S_OK || result3 != HResult.S_OK)
             {
-                logger.LogError("SetDefaultEndpoint returned error codes: {Result1}, {Result2}, {Result3}", result1, result2, result3);
+                logger.LogError("SetDefaultEndpoint 返回错误代码：{Result1}, {Result2}, {Result3}", result1, result2, result3);
                 return;
             }
 
@@ -487,7 +487,7 @@ public class WindowsPlaybackService(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error setting default device");
+            logger.LogError(ex, "设置默认设备时出错");
             return;
         }
         finally
@@ -501,7 +501,7 @@ public class WindowsPlaybackService(
 
     public void OnDeviceStateChanged(string deviceId, DeviceState newState)
     {
-        logger.LogInformation("Device state changed: {DeviceId} - {NewState}", deviceId, newState);
+        logger.LogInformation("设备状态改变：{DeviceId} - {NewState}", deviceId, newState);
     }
 
     public void OnDeviceAdded(string pwstrDeviceId)
@@ -517,7 +517,7 @@ public class WindowsPlaybackService(
                 IsSelected = false
             }
         );
-        logger.LogInformation("Device added: {DeviceId}", pwstrDeviceId);
+        logger.LogInformation("设备已添加：{DeviceId}", pwstrDeviceId);
     }
 
     public void OnDeviceRemoved(string deviceId)
@@ -534,7 +534,7 @@ public class WindowsPlaybackService(
             var selectedIndex = AudioDevices.FindIndex(d => d.IsSelected == true);
             AudioDevices[selectedIndex].IsSelected = false;
             AudioDevices[index].IsSelected = true;
-            logger.LogInformation("Default device changed: {DefaultDeviceId}", defaultDeviceId);
+            logger.LogInformation("默认设备已更改：{DefaultDeviceId}", defaultDeviceId);
         }
     }
 

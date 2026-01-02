@@ -35,7 +35,7 @@ public partial class Server(IPAddress address, int port, ITcpServerProvider sock
 {
     protected override TcpSession CreateSession()
     {
-        logger.LogDebug("Creating new session");
+        logger.LogDebug("创建新会话");
         return new ServerSession(this, socketProvider);
     }
 
@@ -88,6 +88,6 @@ public partial class MulticastClient(string address, int port, IUdpClientProvide
     }
     protected override void OnError(SocketError error)
     {
-        logger.LogError("Session {Id} encountered error: {error}", Id, error);
+        logger.LogError("会话 {Id} 遇到错误：{error}", Id, error);
     }
 }

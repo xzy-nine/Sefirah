@@ -194,7 +194,7 @@ public class RemoteAppRepository(DatabaseContext context, ILogger logger)
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error updating application list for device {DeviceId}", pairedDevice.Id);
+            logger.LogError(ex, "更新设备 {DeviceId} 的应用列表时出错", pairedDevice.Id);
         }
     }
 

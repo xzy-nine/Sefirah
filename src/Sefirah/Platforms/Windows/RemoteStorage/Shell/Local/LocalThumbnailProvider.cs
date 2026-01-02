@@ -24,7 +24,7 @@ public class LocalThumbnailProvider(
             // We want to identify the original item in the source folder that we're mirroring, based on the placeholder item that we
             // get initialized with. There's probably a way to do this based on the file identity blob but this just uses path manipulation.
             var clientPath = _clientItem.GetDisplayName(SIGDN.SIGDN_FILESYSPATH);
-            logger.LogDebug("Client path: {path}", clientPath);
+            logger.LogDebug("客户端路径：{path}", clientPath);
             var rootDirectory = syncProviderContext.Context.RootDirectory;
 
             if (!clientPath.StartsWith(rootDirectory))
@@ -33,14 +33,14 @@ public class LocalThumbnailProvider(
             }
 
             var remotePath = PathMapper.ReplaceStart(clientPath, rootDirectory, "");
-            logger.LogDebug("Mapped remote path: {remotePath}", remotePath);
+            logger.LogDebug("映射的远程路径：{remotePath}", remotePath);
             
             _serverItem = SHCreateItemFromParsingName<IShellItem2>(remotePath);
 
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to initialize thumbnail provider");
+            logger.LogWarning(ex, "初始化缩略图提供程序失败");
             return ex.HResult;
         }
         return HRESULT.S_OK;
@@ -50,7 +50,7 @@ public class LocalThumbnailProvider(
     // This doesn't get called for some reason: https://github.com/dahall/WinClassicSamplesCS/issues/6
     public HRESULT GetThumbnail(uint cx, out SafeHBITMAP phbmp, out WTS_ALPHATYPE pdwAlpha)
     {
-        logger.LogDebug("Get thumbnail for {path}", _serverItem!.GetDisplayName(SIGDN.SIGDN_FILESYSPATH));
+        logger.LogDebug("为 {path} 获取缩略图", _serverItem!.GetDisplayName(SIGDN.SIGDN_FILESYSPATH));
         try
         {
             using var tps = ComReleaserFactory.Create(_serverItem!.BindToHandler<IThumbnailProvider>(default, BHID.BHID_ThumbnailHandler.Guid()));
@@ -58,7 +58,7 @@ public class LocalThumbnailProvider(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to get thumbnail");
+            logger.LogWarning(ex, "获取缩略图失败");
             phbmp = new SafeHBITMAP(nint.Zero, false);
             pdwAlpha = WTS_ALPHATYPE.WTSAT_UNKNOWN;
             return ex.HResult;

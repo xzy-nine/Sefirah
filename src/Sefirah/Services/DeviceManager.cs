@@ -99,7 +99,7 @@ public partial class DeviceManager(ILogger<DeviceManager> logger, DeviceReposito
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error removing device {id}", device.Id);
+                logger.LogError(ex, "移除设备 {id} 时出错", device.Id);
             }
         });
     }
@@ -160,7 +160,7 @@ public partial class DeviceManager(ILogger<DeviceManager> logger, DeviceReposito
 
                     if (result is not ContentDialogResult.Primary)
                     {
-                        logger.LogInformation("User declined device verification");
+                        logger.LogInformation("用户拒绝了设备验证");
                         tcs.SetResult(null);
                         return;
                     }
@@ -191,7 +191,7 @@ public partial class DeviceManager(ILogger<DeviceManager> logger, DeviceReposito
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error verifying device");
+            logger.LogError(ex, "验证设备时出错");
             return null;
         }
     }
@@ -229,7 +229,7 @@ public partial class DeviceManager(ILogger<DeviceManager> logger, DeviceReposito
         }
         catch (Exception e)
         {
-            logger.LogError(e, "Error getting local device");
+            logger.LogError(e, "获取本地设备时出错");
             throw;
         }
     }
@@ -242,7 +242,7 @@ public partial class DeviceManager(ILogger<DeviceManager> logger, DeviceReposito
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error updating local device");
+            logger.LogError(ex, "更新本地设备时出错");
         }
     }
 

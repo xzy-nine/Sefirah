@@ -12,7 +12,7 @@ public sealed class ShellWorker(
     {
         try
         {
-            logger.LogInformation("Starting shell worker");
+            logger.LogInformation("Shell 工作器已启动");
 
             // Start up the task that registers and hosts the services for the shell
             using var disposableShellCookies = new Disposable<IReadOnlyList<uint>>(shellRegistrar.Register(), shellRegistrar.Revoke);
@@ -21,7 +21,7 @@ public sealed class ShellWorker(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Failed to execute shell worker");
+            logger.LogError(ex, "执行 shell 工作项失败");
         }
     }
 }

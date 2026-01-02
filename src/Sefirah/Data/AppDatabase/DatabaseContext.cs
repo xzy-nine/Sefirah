@@ -10,12 +10,12 @@ public class DatabaseContext
     {
         try
         {
-            logger.LogInformation("Initializing database context");
+            logger.LogInformation("正在初始化数据库上下文");
             Database = TryCreateDatabase();
         }
         catch (Exception ex)
         {
-            logger.LogError("Failed to initialize database context {ex}", ex);
+            logger.LogError(ex, "初始化数据库上下文失败：{ex}");
             throw;
         }
     }

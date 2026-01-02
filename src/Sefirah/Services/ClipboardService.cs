@@ -57,11 +57,11 @@ public class ClipboardService : IClipboardService
             try
             {
                 Clipboard.ContentChanged += OnClipboardContentChanged;
-                logger.LogInformation("Clipboard monitoring started");
+                logger.LogInformation("剪贴板监视已启动");
             }
             catch (Exception ex)
             {
-                logger.LogError("Failed to start clipboard monitoring {ex}", ex);
+                logger.LogError("启动剪贴板监控失败：{ex}", ex);
             }
         });
 
@@ -88,7 +88,7 @@ public class ClipboardService : IClipboardService
 
                 if (devicesWithClipboardSync.Count == 0) return;
 
-                logger.LogDebug("Sending clipboard content");
+                logger.LogDebug("发送剪贴板内容");
 
                 var dataPackageView = Clipboard.GetContent();
 
@@ -124,7 +124,7 @@ public class ClipboardService : IClipboardService
                                 mimeType = detectedMimeType;
                             }
 
-                            logger.LogInformation("fileName: {fileName}, fileExtension: {fileExtension}, Mime type: {mimeType}", file.Name, fileExtension, mimeType);
+                            logger.LogInformation("文件名：{fileName}，扩展名：{fileExtension}，MIME 类型：{mimeType}", file.Name, fileExtension, mimeType);
 
                             if ((long)(await file.GetBasicPropertiesAsync()).Size > DirectTransferThreshold)
                                 await HandleLargeImageTransfer(file, fileExtension, mimeType, devicesWithImageSync);
@@ -155,7 +155,7 @@ public class ClipboardService : IClipboardService
             }
             catch (Exception ex)
             {
-                logger.LogError("Error handling clipboard content: {ex}", ex);
+                logger.LogError("处理剪贴板内容时出错：{ex}", ex);
             }
         });
     }
@@ -265,7 +265,7 @@ public class ClipboardService : IClipboardService
 
                 Clipboard.SetContent(dataPackage);
                 await Task.Delay(50);
-                logger.LogInformation("Clipboard content set: {Content}", content);
+                logger.LogInformation("剪贴板内容已设置：{Content}", content);
 
                 if (sourceDevice.DeviceSettings.ShowClipboardToast && content is not string)
                 {
@@ -276,7 +276,7 @@ public class ClipboardService : IClipboardService
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error setting clipboard content");
+                logger.LogError(ex, "设置剪贴板内容时出错");
                 throw;
             }
             finally

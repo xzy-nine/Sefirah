@@ -97,12 +97,12 @@ public sealed class SftpWatcher(
                 }
                 catch (SshConnectionException ex)
                 {
-                    logger.LogError("SSH connection error", ex);
+                    logger.LogError("SSH 连接错误", ex);
                     break;
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError("Unexpected error in SFTP watcher", ex);
+                    logger.LogError("SFTP 监视器发生意外错误", ex);
                     break;
                 }
             }
@@ -117,7 +117,7 @@ public sealed class SftpWatcher(
     {
         if (!client?.IsConnected ?? true)
         {
-            logger.LogWarning("SFTP client is not connected during FindFiles");
+            logger.LogWarning("SFTP 客户端在 FindFiles 中未连接");
             return _knownFiles;
         }
 
@@ -126,7 +126,7 @@ public sealed class SftpWatcher(
             var sftpFiles = client?.ListDirectory(directory);
             if (sftpFiles == null)
             {
-                logger.LogWarning("ListDirectory returned null for {directory}", directory);
+                logger.LogWarning("ListDirectory 为 {directory} 返回空", directory);
                 return _knownFiles; 
             }
 
@@ -164,12 +164,12 @@ public sealed class SftpWatcher(
         }
         catch (SshConnectionException ex)
         {
-            logger.LogError("SSH connection error in FindFiles", ex);
+            logger.LogError("FindFiles 中的 SSH 连接错误", ex);
             return _knownFiles;
         }
         catch (Exception ex)
         {
-            logger.LogError("Unexpected error in FindFiles", ex);
+            logger.LogError("FindFiles 中发生意外错误", ex);
             return _knownFiles;
         }
     }
@@ -188,7 +188,7 @@ public sealed class SftpWatcher(
                 }
                 catch (Exception ex) 
                 { 
-                    logger.LogError("Error disconnecting SFTP client", ex);
+                    logger.LogError("断开 SFTP 客户端时出错", ex);
                 }
             }
 
@@ -197,11 +197,11 @@ public sealed class SftpWatcher(
                 try
                 {
                     client.Connect();
-                    logger.LogInformation("Successfully reconnected to SFTP server");
+                    logger.LogInformation("已成功重新连接至 SFTP 服务器");
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError("Failed to connect SFTP client", ex);
+                    logger.LogError("连接 SFTP 客户端失败", ex);
                     // Check cancellation before delay
                     cancellationToken.ThrowIfCancellationRequested();
                     await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
@@ -209,12 +209,12 @@ public sealed class SftpWatcher(
             }
             else
             {
-                logger.LogError("SFTP client is null during reconnection attempt");
+                logger.LogError("重连尝试期间 SFTP 客户端为空");
             }
         }
         catch (Exception ex)
         {
-            logger.LogError("Unexpected error during reconnection", ex);
+            logger.LogError("重连期间发生意外错误", ex);
             throw;
         }
     }
@@ -232,7 +232,7 @@ public sealed class SftpWatcher(
         }
         catch (Exception ex)
         {
-            logger.LogError("Error checking hydration state for {path}", serverPath, ex);
+            logger.LogError("检查 {path} 的 hydration 状态时出错", serverPath, ex);
             return false;
         }
     }
@@ -243,7 +243,7 @@ public sealed class SftpWatcher(
         {
             try
             {
-                logger.LogDebug("Disposing SFTP watcher");
+                logger.LogDebug("正在处置 SFTP 监视器");
                 _cancellationTokenSource.Cancel();
                 
                 // Safely disconnect the client
@@ -256,7 +256,7 @@ public sealed class SftpWatcher(
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError("Error disconnecting client during disposal", ex);
+                    logger.LogError("处置期间断开客户端时出错", ex);
                 }
             }
             catch (ObjectDisposedException)

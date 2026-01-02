@@ -64,23 +64,23 @@ public class UploadCommand(
                 using var pShellItem = ComReleaserFactory.Create(psiItemArray.GetItemAt(i));
 
                 var rawFullPath = pShellItem.Item.GetDisplayName(SIGDN.SIGDN_FILESYSPATH);
-                logger.LogInformation("Upload Command received for file {path}", rawFullPath);
+                logger.LogInformation("收到上传命令，文件：{path}", rawFullPath);
 
                 // Clear the in-sync flag to force reupload
                 try
                 {
                     var currentState = CloudFilter.GetPlaceholderState(rawFullPath);
-                    logger.LogInformation("Current state before reupload: {state}", currentState);
+                    logger.LogInformation("重新上传前的状态：{state}", currentState);
 
                     if (currentState.HasFlag(CF_PLACEHOLDER_STATE.CF_PLACEHOLDER_STATE_IN_SYNC))
                     {
                         CloudFilter.ClearInSyncState(rawFullPath);
-                        logger.LogInformation("Cleared in-sync state for reupload");
+                        logger.LogInformation("已清除同步状态以重新上传");
                     }
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "Failed to clear sync state for {path}", rawFullPath);
+                    logger.LogError(ex, "清除同步状态失败：{path}", rawFullPath);
                 }
 
                 commandWriter.TryWrite(new ShellCommand
@@ -93,7 +93,7 @@ public class UploadCommand(
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Upload command failed");
+            logger.LogError(ex, "上传命令失败");
             return ex.HResult;
         }
 

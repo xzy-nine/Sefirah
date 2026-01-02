@@ -69,13 +69,13 @@ public class MessageHandler(
                     await fileTransferService.ReceiveBulkFiles(fileTransfer, device);
                     break;
                 default:
-                    logger.LogWarning("Unknown message type received: {type}", message.GetType().Name);
+                    logger.LogWarning("收到未知消息类型：{type}", message.GetType().Name);
                     break;
             }
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error handling message");
+            logger.LogError(ex, "处理消息时出错");
         }
     }
 }

@@ -18,7 +18,7 @@ public static class NotificationActionUtils
         };
 
         sessionManager.SendMessage(device.Session, SocketMessageSerializer.Serialize(replyAction));
-        logger.LogDebug("Sent reply action for notification {NotificationKey} to device {DeviceId}", notificationKey, device.Id);
+        logger.LogDebug("已向设备 {DeviceId} 发送回复动作（通知键：{NotificationKey}）", device.Id, notificationKey);
     }
 
     public static void ProcessClickAction(ISessionManager sessionManager, ILogger logger, PairedDevice device, string notificationKey, int actionIndex)
@@ -33,6 +33,6 @@ public static class NotificationActionUtils
         };
 
         sessionManager.SendMessage(device.Session, SocketMessageSerializer.Serialize(notificationAction));
-        logger.LogDebug("Sent click action for notification {NotificationKey} to device {DeviceId}", notificationKey, device.Id);
+        logger.LogDebug("已向设备 {DeviceId} 发送点击动作（通知键：{NotificationKey}）", device.Id, notificationKey);
     }
 } 

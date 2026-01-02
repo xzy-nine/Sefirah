@@ -7,7 +7,7 @@ public class ShellRegistrar(
   ILogger logger
 ) {
   public IReadOnlyList<uint> Register() {
-    logger.LogDebug("Register shell extensions");
+    logger.LogDebug("注册 Shell 扩展");
 
     var cookies = factories
       .Select((factory) => {
@@ -51,7 +51,7 @@ public class ShellRegistrar(
   }
 
   public void Revoke(IEnumerable<uint> cookies) {
-    logger.LogDebug("Unregister shell extensions");
+    logger.LogDebug("注销 Shell 扩展");
     foreach (var cookie in cookies)
     {
       CoRevokeClassObject(cookie);
