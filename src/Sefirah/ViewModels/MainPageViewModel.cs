@@ -53,12 +53,9 @@ public sealed partial class MainPageViewModel : BaseViewModel
         if (Device!.ConnectionStatus)
         {
             var message = new CommandMessage { CommandType = CommandType.Disconnect };
-            SessionManager.SendMessage(Device.Session!, SocketMessageSerializer.Serialize(message));
+            SessionManager.SendMessage(Device.Id, SocketMessageSerializer.Serialize(message));
             await Task.Delay(50);
-            if (Device.Session is not null)
-            {
-                SessionManager.DisconnectSession(Device.Session);
-            }
+            SessionManager.DisconnectDevice(Device.Id);
             Device.ConnectionStatus = false;
         }
     }
@@ -118,7 +115,7 @@ public sealed partial class MainPageViewModel : BaseViewModel
         if (int.TryParse(modeStr, out int mode))
         {
             var message = new DeviceRingerMode { RingerMode = mode };
-            SessionManager.SendMessage(Device!.Session!, SocketMessageSerializer.Serialize(message));
+            SessionManager.SendMessage(Device!.Id, SocketMessageSerializer.Serialize(message));
         }
     }
 
@@ -166,10 +163,10 @@ public sealed partial class MainPageViewModel : BaseViewModel
 
         // Scrcpy doesn't have a way of opening notifications afaik, so we will just have the notification listener on Android to open it for us
         // Plus we have to wait (2s will do ig?) until the app is actually launched to send the intent for launching the notification since Google added a lot more restrictions in this particular case
-        if (started && Device!.Session is not null)
+        if (started && Device!.ConnectionStatus)
         {
             await Task.Delay(2000);
-            SessionManager.SendMessage(Device.Session, SocketMessageSerializer.Serialize(notificationToInvoke));
+            SessionManager.SendMessage(Device.Id, SocketMessageSerializer.Serialize(notificationToInvoke));
         }
     }
 

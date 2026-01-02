@@ -26,7 +26,7 @@ public abstract class BaseActionService(
 
     private void OnConnectionStatusChanged(object? sender, (PairedDevice Device, bool IsConnected) args)
     {
-        if (args.IsConnected && args.Device.Session is not null)
+        if (args.IsConnected)
         {
             var actions = generalSettingsService.Actions;
             foreach (var action in actions)
@@ -36,7 +36,7 @@ public abstract class BaseActionService(
                     ActionId = action.Id, 
                     ActionName = action.Name 
                 };
-                sessionManager.SendMessage(args.Device.Session, SocketMessageSerializer.Serialize(actionMessage));
+                sessionManager.SendMessage(args.Device.Id, SocketMessageSerializer.Serialize(actionMessage));
             }
         }
     }

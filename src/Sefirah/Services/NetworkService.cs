@@ -31,11 +31,14 @@ public class NetworkService(
 
     private readonly Lazy<IMessageHandler> messageHandler = new(messageHandlerFactory);
     private readonly Dictionary<Guid, string> sessionBuffers = new();
+    private readonly Dictionary<string, ServerSession> deviceSessions = new();
+    private readonly Dictionary<Guid, string> sessionDeviceMap = new();
+    private readonly object sessionLock = new();
     private string? localPublicKey;
     private string? localDeviceId;
     private Timer? heartbeatTimer;
-    private readonly TimeSpan heartbeatInterval = TimeSpan.FromSeconds(5);
-    private readonly TimeSpan heartbeatTimeout = TimeSpan.FromSeconds(60);
+    private readonly TimeSpan heartbeatInterval = TimeSpan.FromSeconds(4);
+    private readonly TimeSpan heartbeatTimeout = TimeSpan.FromSeconds(25);
     
     private ObservableCollection<PairedDevice> PairedDevices => deviceManager.PairedDevices;
 
@@ -83,49 +86,20 @@ public class NetworkService(
         }
     }
 
-    public void SendMessage(ServerSession session, string message)
+    public void SendMessage(string deviceId, string message)
     {
         try
         {
-            if (session is null)
-            {
-                logger.LogDebug("跳过发送：会话为空");
-                return;
-            }
-
-            if (deviceManager.PairedDevices is null)
-            {
-                logger.LogWarning("无法发送消息：配对设备列表未初始化");
-                return;
-            }
-
-            PairedDevice? device = null;
-            try
-            {
-                foreach (var d in deviceManager.PairedDevices)
-                {
-                    if (d?.Session is null) continue;
-                    if (session.Id == d.Session.Id)
-                    {
-                        device = d;
-                        break;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "扫描配对设备以查找会话时出错");
-                return;
-            }
+            var device = PairedDevices.FirstOrDefault(d => d.Id == deviceId);
             if (device is null)
             {
-                logger.LogDebug("跳过发送：未找到与会话 {id} 对应的设备", session.Id);
+                logger.LogWarning("跳过发送：未找到设备 {deviceId}", deviceId);
                 return;
             }
 
             if (device.SharedSecret is null)
             {
-                logger.LogWarning("无法发送加密消息：会话 {id} 缺少共享密钥", session.Id);
+                logger.LogWarning("无法发送加密消息：设备 {deviceId} 缺少共享密钥", deviceId);
                 return;
             }
 
@@ -135,18 +109,17 @@ public class NetworkService(
                 return;
             }
 
-            if (session.Socket is not null && session.Socket.Connected)
+            if (!TryGetSession(deviceId, out var session) || session?.Socket is null || !session.Socket.Connected)
             {
-                var encryptedPayload = NotifyCryptoHelper.Encrypt(message, device.SharedSecret);
-                var framedMessage = $"DATA_JSON:{localDeviceId}:{localPublicKey}:{encryptedPayload}\n";
-                byte[] messageBytes = Encoding.UTF8.GetBytes(framedMessage);
+                logger.LogTrace("跳过发送：设备 {id} 未连接", deviceId);
+                return;
+            }
 
-                session.Send(messageBytes, 0, messageBytes.Length);
-            }
-            else
-            {
-                logger.LogDebug("跳过发送：设备 {id} 的会话未连接", device.Id);
-            }
+            var encryptedPayload = NotifyCryptoHelper.Encrypt(message, device.SharedSecret);
+            var framedMessage = $"DATA_JSON:{localDeviceId}:{localPublicKey}:{encryptedPayload}\n";
+            byte[] messageBytes = Encoding.UTF8.GetBytes(framedMessage);
+
+            session.Send(messageBytes, 0, messageBytes.Length);
         }
         catch (Exception ex)
         {
@@ -156,17 +129,100 @@ public class NetworkService(
 
     public void BroadcastMessage(string message)
     {
-        if (PairedDevices.Count == 0) return;
         try
         {
-            foreach (var device in PairedDevices.Where(d => d.Session != null))
+            var targets = GetConnectedDeviceIds();
+            foreach (var deviceId in targets)
             {
-                SendMessage(device.Session!, message);
+                SendMessage(deviceId, message);
             }
         }
         catch (Exception ex)
         {
             logger.LogError("向所有设备发送消息时出错：{ex}", ex);
+        }
+    }
+
+    public void DisconnectDevice(string deviceId)
+    {
+        if (TryGetSession(deviceId, out var session) && session is not null)
+        {
+            DisconnectSession(session);
+        }
+    }
+
+    private bool TryGetSession(string deviceId, out ServerSession? session)
+    {
+        lock (sessionLock)
+        {
+            return deviceSessions.TryGetValue(deviceId, out session);
+        }
+    }
+
+    private List<string> GetConnectedDeviceIds()
+    {
+        lock (sessionLock)
+        {
+            return deviceSessions.Keys.ToList();
+        }
+    }
+
+    private PairedDevice? GetDeviceBySession(ServerSession session)
+    {
+        string? deviceId = null;
+        lock (sessionLock)
+        {
+            sessionDeviceMap.TryGetValue(session.Id, out deviceId);
+        }
+
+        return deviceId is null ? null : PairedDevices.FirstOrDefault(d => d.Id == deviceId);
+    }
+
+    private void BindSession(string deviceId, ServerSession session)
+    {
+        lock (sessionLock)
+        {
+            if (deviceSessions.TryGetValue(deviceId, out var existing) && existing.Id != session.Id)
+            {
+                try
+                {
+                    existing.Disconnect();
+                    existing.Dispose();
+                }
+                catch
+                {
+                    // best-effort cleanup
+                }
+
+                // remove old mapping entry
+                sessionDeviceMap.Remove(existing.Id);
+            }
+
+            deviceSessions[deviceId] = session;
+            sessionDeviceMap[session.Id] = deviceId;
+        }
+    }
+
+    private void UnbindSession(ServerSession session)
+    {
+        lock (sessionLock)
+        {
+            if (sessionDeviceMap.TryGetValue(session.Id, out var deviceId))
+            {
+                sessionDeviceMap.Remove(session.Id);
+                if (deviceSessions.TryGetValue(deviceId, out var existing) && existing.Id == session.Id)
+                {
+                    deviceSessions.Remove(deviceId);
+                }
+            }
+        }
+    }
+
+    private List<(string DeviceId, ServerSession Session)> GetSessionSnapshot()
+    {
+        lock (sessionLock)
+        {
+            return deviceSessions.Select(kvp => (kvp.Key, kvp.Value)).ToList();
         }
     }
 
@@ -192,6 +248,8 @@ public class NetworkService(
 
     public void OnDisconnected(ServerSession session)
     {
+        sessionBuffers.Remove(session.Id);
+        UnbindSession(session);
         DetachSession(session);
     }
 
@@ -228,7 +286,7 @@ public class NetworkService(
 
                 if (string.IsNullOrEmpty(message)) continue;
 
-                var device = PairedDevices.FirstOrDefault(d => d.Session?.Id == session.Id);
+                var device = GetDeviceBySession(session);
                 if (device is null)
                 {
                     await HandleHandshakeAsync(session, message);
@@ -309,7 +367,7 @@ public class NetworkService(
                 }
             });
 
-            ConnectionStatusChanged?.Invoke(this, (device, true));
+            BindSession(device.Id, session);
 
             if (localDeviceId is not null && localPublicKey is not null)
             {
@@ -411,6 +469,8 @@ public class NetworkService(
                 deviceManager.ActiveDevice ??= device;
             });
 
+            BindSession(device.Id, session);
+
             ConnectionStatusChanged?.Invoke(this, (device, true));
             return device;
         }
@@ -425,6 +485,12 @@ public class NetworkService(
     {
         try
         {
+            if (!payload.TrimStart().StartsWith('{') && !payload.TrimStart().StartsWith('['))
+            {
+                logger.LogDebug("跳过非 JSON 载荷：{payload}", payload.Length > 50 ? payload[..50] + "..." : payload);
+                return;
+            }
+
             var socketMessage = SocketMessageSerializer.DeserializeMessage(payload);
             if (socketMessage is not null && socketMessage is not SocketMessage)
             {
@@ -496,11 +562,12 @@ public class NetworkService(
         }
     }
 
-    public void DisconnectSession(ServerSession session)
+    private void DisconnectSession(ServerSession session)
     {
         try
         {
             sessionBuffers.Remove(session.Id);
+            UnbindSession(session);
             session.Disconnect();
             session.Dispose();
             DetachSession(session);
@@ -513,24 +580,33 @@ public class NetworkService(
 
     private void DetachSession(ServerSession session)
     {
-        var device = PairedDevices.FirstOrDefault(d => d.Session == session);
+        var device = GetDeviceBySession(session) ?? PairedDevices.FirstOrDefault(d => d.Session == session);
         if (device is null) return;
 
-        App.MainWindow.DispatcherQueue.EnqueueAsync(() =>
+        UpdateDeviceState(device, d =>
         {
-            device.Session = null;
-            logger.LogDebug($"设备 {device.Name} 的会话已解绑");
+            d.Session = null;
+            if (d.ConnectionStatus)
+            {
+                d.ConnectionStatus = false;
+                ConnectionStatusChanged?.Invoke(this, (d, false));
+            }
+            logger.LogTrace($"设备 {d.Name} 的会话已解绑");
         });
     }
 
     private void MarkDeviceAlive(PairedDevice device)
     {
-        device.LastHeartbeat = DateTime.UtcNow;
-        if (!device.ConnectionStatus)
+        var now = DateTime.UtcNow;
+        UpdateDeviceState(device, d =>
         {
-            device.ConnectionStatus = true;
-            ConnectionStatusChanged?.Invoke(this, (device, true));
-        }
+            d.LastHeartbeat = now;
+            if (!d.ConnectionStatus)
+            {
+                d.ConnectionStatus = true;
+                ConnectionStatusChanged?.Invoke(this, (d, true));
+            }
+        });
     }
 
     private void StartHeartbeat()
@@ -547,30 +623,32 @@ public class NetworkService(
             var payload = $"HEARTBEAT:{localDeviceId}:{localPublicKey}\n";
             var bytes = Encoding.UTF8.GetBytes(payload);
 
+            foreach (var (deviceId, session) in GetSessionSnapshot())
+            {
+                try
+                {
+                    session.Send(bytes, 0, bytes.Length);
+                }
+                catch
+                {
+                    // best-effort heartbeat send
+                }
+            }
+
             foreach (var device in PairedDevices.ToList())
             {
-                // 发送心跳（如果当前有持久连接）
-                if (device.Session is not null)
-                {
-                    try
-                    {
-                        device.Session.Send(bytes, 0, bytes.Length);
-                    }
-                    catch
-                    {
-                        // best-effort heartbeat send
-                    }
-                }
-
-                // 超时判定：无论是否有会话，只要超过超时时间就标记离线
                 var last = device.LastHeartbeat;
                 if (last.HasValue && DateTime.UtcNow - last.Value > heartbeatTimeout && device.ConnectionStatus)
                 {
-                    App.MainWindow.DispatcherQueue.EnqueueAsync(() =>
+                    UpdateDeviceState(device, d =>
                     {
-                        device.ConnectionStatus = false;
-                        device.Session = null;
-                        ConnectionStatusChanged?.Invoke(this, (device, false));
+                        d.ConnectionStatus = false;
+                        d.Session = null;
+                        if (TryGetSession(d.Id, out var staleSession) && staleSession is not null)
+                        {
+                            UnbindSession(staleSession);
+                        }
+                        ConnectionStatusChanged?.Invoke(this, (d, false));
                     });
                 }
             }
@@ -579,5 +657,24 @@ public class NetworkService(
         {
             // best-effort heartbeat
         }
+    }
+
+    private void UpdateDeviceState(PairedDevice device, Action<PairedDevice> update)
+    {
+        var dispatcher = App.MainWindow?.DispatcherQueue;
+
+        if (dispatcher is null)
+        {
+            update(device);
+            return;
+        }
+
+        if (dispatcher.HasThreadAccess)
+        {
+            update(device);
+            return;
+        }
+
+        dispatcher.TryEnqueue(() => update(device));
     }
 }

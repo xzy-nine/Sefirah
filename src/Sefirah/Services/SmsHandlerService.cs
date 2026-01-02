@@ -260,7 +260,7 @@ public class SmsHandlerService(
         }
     }
 
-    public void RequestThreadHistory(ServerSession session, long threadId, long rangeStartTimestamp = -1, long numberToRequest = -1)
+    public void RequestThreadHistory(string deviceId, long threadId, long rangeStartTimestamp = -1, long numberToRequest = -1)
     {
         var threadRequest = new ThreadRequest
         {
@@ -268,12 +268,12 @@ public class SmsHandlerService(
             RangeStartTimestamp = rangeStartTimestamp,
             NumberToRequest = numberToRequest
         };
-        sessionManager.SendMessage(session, SocketMessageSerializer.Serialize(threadRequest));
+        sessionManager.SendMessage(deviceId, SocketMessageSerializer.Serialize(threadRequest));
     }
 
-    public void SendTextMessage(ServerSession session, TextMessage textMessage)
+    public void SendTextMessage(string deviceId, TextMessage textMessage)
     {
-        sessionManager.SendMessage(session, SocketMessageSerializer.Serialize(textMessage));
+        sessionManager.SendMessage(deviceId, SocketMessageSerializer.Serialize(textMessage));
     }
 
     public async Task HandleContactMessage(string deviceId, ContactMessage contactMessage)

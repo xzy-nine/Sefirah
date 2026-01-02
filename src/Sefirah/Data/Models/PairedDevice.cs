@@ -33,7 +33,44 @@ public partial class PairedDevice : ObservableObject
     public bool ConnectionStatus 
     {
         get => connectionStatus;
-        set => SetProperty(ref connectionStatus, value);
+        set
+        {
+            if (value)
+            {
+                // If setting to true, cancel any pending disconnect
+                disconnectDebounceTimer?.Stop();
+                disconnectDebounceTimer?.Dispose();
+                disconnectDebounceTimer = null;
+                pendingDisconnect = false;
+                SetProperty(ref connectionStatus, true);
+            }
+            else if (connectionStatus && !pendingDisconnect)
+            {
+                // If setting to false and currently true, debounce
+                pendingDisconnect = true;
+                disconnectDebounceTimer?.Stop();
+                disconnectDebounceTimer?.Dispose();
+                disconnectDebounceTimer = new System.Timers.Timer(5000); // 5 second debounce
+                disconnectDebounceTimer.Elapsed += (s, e) =>
+                {
+                    App.MainWindow?.DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (pendingDisconnect)
+                        {
+                            SetProperty(ref connectionStatus, false);
+                            pendingDisconnect = false;
+                        }
+                        disconnectDebounceTimer?.Dispose();
+                        disconnectDebounceTimer = null;
+                    });
+                };
+                disconnectDebounceTimer.Start();
+            }
+            else if (!connectionStatus)
+            {
+                // Already false, do nothing
+            }
+        }
     }
 
     private DeviceStatus? status;
@@ -54,6 +91,9 @@ public partial class PairedDevice : ObservableObject
     public byte[]? SharedSecret { get; set; }
     public string? RemotePublicKey { get; set; }
     public DateTime? LastHeartbeat { get; set; }
+
+    private System.Timers.Timer? disconnectDebounceTimer;
+    private bool pendingDisconnect;
 
     private readonly IAdbService adbService;
     private readonly IUserSettingsService userSettingsService;

@@ -189,9 +189,9 @@ public class NotificationService(
                     NotificationType = NotificationType.Removed
                 };
                 string jsonMessage = SocketMessageSerializer.Serialize(notificationToRemove);
-                if (device.Session is not null)
+                if (device.ConnectionStatus)
                 {
-                    sessionManager.SendMessage(device.Session, jsonMessage);
+                    sessionManager.SendMessage(device.Id, jsonMessage);
                 }
             }
         }
@@ -229,11 +229,11 @@ public class NotificationService(
             ClearHistory(activeDevice);
             activeNotifications.Clear();
             notificationRepository.ClearDeviceNotifications(activeDevice.Id);
-            if (activeDevice.Session is null) return;
+            if (!activeDevice.ConnectionStatus) return;
 
             var command = new CommandMessage { CommandType = CommandType.ClearNotifications };
             string jsonMessage = SocketMessageSerializer.Serialize(command);
-            sessionManager.SendMessage(activeDevice.Session, jsonMessage);
+            sessionManager.SendMessage(activeDevice.Id, jsonMessage);
             logger.LogInformation("已清除设备 {DeviceId} 的全部通知", activeDevice.Id);
         }
         catch (Exception ex)
@@ -292,9 +292,9 @@ public class NotificationService(
             ReplyText = replyText,
         };
 
-        if (device.Session is null) return;
+        if (!device.ConnectionStatus) return;
 
-        sessionManager.SendMessage(device.Session, SocketMessageSerializer.Serialize(replyAction));
+        sessionManager.SendMessage(device.Id, SocketMessageSerializer.Serialize(replyAction));
         logger.LogDebug("已向设备 {DeviceId} 发送回复动作（通知键：{NotificationKey}）", device.Id, notificationKey);
     }
 
@@ -307,9 +307,9 @@ public class NotificationService(
             IsReplyAction = false
         };
 
-        if (device.Session is null) return;
+        if (!device.ConnectionStatus) return;
 
-        sessionManager.SendMessage(device.Session, SocketMessageSerializer.Serialize(notificationAction));
+        sessionManager.SendMessage(device.Id, SocketMessageSerializer.Serialize(notificationAction));
         logger.LogDebug("已向设备 {DeviceId} 发送点击动作（通知键：{NotificationKey}）", device.Id, notificationKey);
     }
 

@@ -365,6 +365,11 @@ public class FileTransferService(
     {
         try
         {
+            if (!device.ConnectionStatus)
+            {
+                logger.LogWarning("设备未连接，无法发送文件");
+                return;
+            }
             // Wait for any existing transfer to complete
             if (transferCompletionSource?.Task.IsCompleted == false)
             {
@@ -394,7 +399,7 @@ public class FileTransferService(
 
             var json = SocketMessageSerializer.Serialize(transfer);
             logger.Debug($"发送元数据：{json}");
-            sessionManager.SendMessage(device.Session!, json);
+            sessionManager.SendMessage(device.Id, json);
 
             notificationHandler.ShowFileTransferNotification(
                 string.Format("FileTransferNotification.Sending".GetLocalizedResource(), currentTransfer.Device),
@@ -429,6 +434,11 @@ public class FileTransferService(
     {
         try
         {
+            if (!device.ConnectionStatus)
+            {
+                logger.LogWarning("设备未连接，无法发送文件");
+                return;
+            }
             var fileMetadataList = await Task.WhenAll(files.Select(file => file.ToFileMetadata()));
 
             currentTransfer = new TransferContext(
@@ -448,7 +458,7 @@ public class FileTransferService(
             };
 
             // Send metadata first
-            sessionManager.SendMessage(device.Session!, SocketMessageSerializer.Serialize(transfer));
+            sessionManager.SendMessage(device.Id, SocketMessageSerializer.Serialize(transfer));
 
             notificationHandler.ShowFileTransferNotification(
                 string.Format("FileTransferNotification.SendingBulk".GetLocalizedResource(), 1, currentTransfer.Files.Count, currentTransfer.Device),

@@ -7,6 +7,7 @@ using Sefirah.Dialogs;
 using Sefirah.Helpers;
 using Sefirah.Utils;
 using System.Text;
+using Windows.Storage;
 
 namespace Sefirah.Services;
 
@@ -201,19 +202,25 @@ public partial class DeviceManager(ILogger<DeviceManager> logger, DeviceReposito
         try
         {
             var localDevice = repository.GetLocalDevice();
+            var localSettings = ApplicationData.Current.LocalSettings;
+            var persistedId = localSettings.Values[nameof(LocalDeviceEntity.DeviceId)] as string;
+            var persistedPublicKey = localSettings.Values["PublicKey"] as string;
+
             if (localDevice is null)
             {
                 var (name, _) = await UserInformation.GetCurrentUserInfoAsync();
-                var publicKey = NotifyCryptoHelper.GeneratePublicKey();
+                var publicKey = persistedPublicKey ?? NotifyCryptoHelper.GeneratePublicKey();
                 localDevice = new LocalDeviceEntity
                 {
-                    DeviceId = Guid.NewGuid().ToString(),
+                    DeviceId = persistedId ?? Guid.NewGuid().ToString(),
                     DeviceName = name,
                     PublicKey = Encoding.UTF8.GetBytes(publicKey),
                     PrivateKey = Array.Empty<byte>(),
                 };
 
                 repository.AddOrUpdateLocalDevice(localDevice);
+                localSettings.Values[nameof(LocalDeviceEntity.DeviceId)] = localDevice.DeviceId;
+                localSettings.Values["PublicKey"] = publicKey;
             }
             else
             {
@@ -223,6 +230,26 @@ public partial class DeviceManager(ILogger<DeviceManager> logger, DeviceReposito
                 {
                     localDevice.PublicKey = Encoding.UTF8.GetBytes(normalizedKey);
                     repository.AddOrUpdateLocalDevice(localDevice);
+                }
+
+                if (string.IsNullOrWhiteSpace(localDevice.DeviceId) && persistedId is not null)
+                {
+                    localDevice.DeviceId = persistedId;
+                    repository.AddOrUpdateLocalDevice(localDevice);
+                }
+                else if (string.IsNullOrWhiteSpace(persistedId))
+                {
+                    localSettings.Values[nameof(LocalDeviceEntity.DeviceId)] = localDevice.DeviceId;
+                }
+
+                if (persistedPublicKey is not null && persistedPublicKey != currentKey)
+                {
+                    localDevice.PublicKey = Encoding.UTF8.GetBytes(persistedPublicKey);
+                    repository.AddOrUpdateLocalDevice(localDevice);
+                }
+                else if (persistedPublicKey is null)
+                {
+                    localSettings.Values["PublicKey"] = currentKey;
                 }
             }
             return localDevice;

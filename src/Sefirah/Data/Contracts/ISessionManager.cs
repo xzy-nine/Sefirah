@@ -10,19 +10,20 @@ public interface ISessionManager
     event EventHandler<(PairedDevice Device, bool IsConnected)> ConnectionStatusChanged;
 
     /// <summary>
-    /// Sends a message to the connected client.
+    /// Sends a message to the specified device.
     /// </summary>
+    /// <param name="deviceId">Target device ID.</param>
     /// <param name="message">The message to send.</param>
-    void SendMessage(ServerSession session, string message);
+    void SendMessage(string deviceId, string message);
 
     /// <summary>
-    /// Sends a message to all connected clients.
+    /// Sends a message to all connected devices.
     /// </summary>
     /// <param name="message">The message to send.</param>
     void BroadcastMessage(string message);
 
     /// <summary>
-    /// Disconnects the current session.
+    /// Disconnects the specified device session (if any).
     /// </summary>
-    void DisconnectSession(ServerSession session);
+    void DisconnectDevice(string deviceId);
 }

@@ -48,7 +48,7 @@ public class WindowsPlaybackService(
 
             sessionManager.ConnectionStatusChanged += async (sender, args) =>
             {
-                if (args.IsConnected && args.Device.Session != null && args.Device.DeviceSettings?.MediaSessionSyncEnabled == true)
+                if (args.IsConnected && args.Device.DeviceSettings?.MediaSessionSyncEnabled == true)
                 {
                     foreach (var session in activeSessions.Values)
                     {
@@ -58,7 +58,7 @@ public class WindowsPlaybackService(
                     {
                         device.AudioDeviceType = AudioMessageType.New;
                         string jsonMessage = SocketMessageSerializer.Serialize(device);
-                        sessionManager.SendMessage(args.Device.Session, jsonMessage);
+                        sessionManager.SendMessage(args.Device.Id, jsonMessage);
                     }
                 }
             };
@@ -362,10 +362,10 @@ public class WindowsPlaybackService(
         {
             foreach (var device in deviceManager.PairedDevices)
             {
-                if (device.Session is not null && device.DeviceSettings.MediaSessionSyncEnabled)
+                if (device.ConnectionStatus && device.DeviceSettings.MediaSessionSyncEnabled)
                 {
                     string jsonMessage = SocketMessageSerializer.Serialize(playbackSession);
-                    sessionManager.SendMessage(device.Session, jsonMessage);
+                    sessionManager.SendMessage(device.Id, jsonMessage);
                 }
             }
         }

@@ -180,7 +180,10 @@ public class ClipboardService : IClipboardService
         var serializedMessage = SocketMessageSerializer.Serialize(message);
         foreach (var device in devices)
         {
-            sessionManager.SendMessage(device.Session!, serializedMessage);
+            if (device.ConnectionStatus)
+            {
+                sessionManager.SendMessage(device.Id, serializedMessage);
+            }
         }
         return;
     }
@@ -218,7 +221,10 @@ public class ClipboardService : IClipboardService
 
         foreach (var device in devices)
         {
-            sessionManager.SendMessage(device.Session!, serializedMessage);
+            if (device.ConnectionStatus)
+            {
+                sessionManager.SendMessage(device.Id, serializedMessage);
+            }
         }
     }
 

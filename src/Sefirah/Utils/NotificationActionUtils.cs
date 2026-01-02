@@ -8,7 +8,7 @@ public static class NotificationActionUtils
 {
     public static void ProcessReplyAction(ISessionManager sessionManager, ILogger logger, PairedDevice device, string notificationKey, string replyResultKey, string replyText)
     {
-        if (device.Session is null) return;
+        if (!device.ConnectionStatus) return;
 
         var replyAction = new ReplyAction
         {
@@ -17,13 +17,13 @@ public static class NotificationActionUtils
             ReplyText = replyText,
         };
 
-        sessionManager.SendMessage(device.Session, SocketMessageSerializer.Serialize(replyAction));
+        sessionManager.SendMessage(device.Id, SocketMessageSerializer.Serialize(replyAction));
         logger.LogDebug("已向设备 {DeviceId} 发送回复动作（通知键：{NotificationKey}）", device.Id, notificationKey);
     }
 
     public static void ProcessClickAction(ISessionManager sessionManager, ILogger logger, PairedDevice device, string notificationKey, int actionIndex)
     {        
-        if (device.Session is null) return;
+        if (!device.ConnectionStatus) return;
 
         var notificationAction = new NotificationAction
         {
@@ -32,7 +32,7 @@ public static class NotificationActionUtils
             IsReplyAction = false
         };
 
-        sessionManager.SendMessage(device.Session, SocketMessageSerializer.Serialize(notificationAction));
+        sessionManager.SendMessage(device.Id, SocketMessageSerializer.Serialize(notificationAction));
         logger.LogDebug("已向设备 {DeviceId} 发送点击动作（通知键：{NotificationKey}）", device.Id, notificationKey);
     }
 } 

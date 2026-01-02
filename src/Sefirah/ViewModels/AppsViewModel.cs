@@ -41,7 +41,7 @@ public sealed partial class AppsViewModel : BaseViewModel
 
         IsLoading = true;
         var message = new CommandMessage { CommandType = CommandType.RequestAppList };
-        SessionManager.SendMessage(DeviceManager.ActiveDevice!.Session!, SocketMessageSerializer.Serialize(message));
+        SessionManager.SendMessage(DeviceManager.ActiveDevice!.Id, SocketMessageSerializer.Serialize(message));
     }
 
     public void PinApp(ApplicationInfo app)

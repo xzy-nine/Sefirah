@@ -35,7 +35,7 @@ public partial class Server(IPAddress address, int port, ITcpServerProvider sock
 {
     protected override TcpSession CreateSession()
     {
-        logger.LogDebug("创建新会话");
+        logger.LogTrace("创建新会话");
         return new ServerSession(this, socketProvider);
     }
 

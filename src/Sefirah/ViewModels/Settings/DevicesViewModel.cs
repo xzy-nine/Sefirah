@@ -62,9 +62,9 @@ public partial class DevicesViewModel : ObservableObject
                 if (device.ConnectionStatus)
                 {
                     var message = new CommandMessage { CommandType = CommandType.Disconnect };
-                    SessionManager.SendMessage(device.Session!, SocketMessageSerializer.Serialize(message));
+                    SessionManager.SendMessage(device.Id, SocketMessageSerializer.Serialize(message));
 
-                    SessionManager.DisconnectSession(device.Session!);
+                    SessionManager.DisconnectDevice(device.Id);
                 }
 
                 SftpService.Remove(device.Id);
