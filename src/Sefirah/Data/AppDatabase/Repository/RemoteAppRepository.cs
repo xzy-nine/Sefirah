@@ -1,11 +1,14 @@
+using System.Text.Json;
 using CommunityToolkit.WinUI;
 using Sefirah.Data.AppDatabase.Models;
 using Sefirah.Data.Enums;
 using Sefirah.Data.Models;
+using Sefirah.Services;
+using Sefirah.Data.Contracts;
 
 namespace Sefirah.Data.AppDatabase.Repository;
 
-public class RemoteAppRepository(DatabaseContext context, ILogger logger)
+public class RemoteAppRepository(DatabaseContext context, ILogger logger, INetworkService networkService)
 {
     public ObservableCollection<ApplicationInfo> Applications { get; set; } = [];
     
@@ -244,6 +247,31 @@ public class RemoteAppRepository(DatabaseContext context, ILogger logger)
         deviceInfoList.First(d => d.DeviceId == deviceId).Pinned = false;
         app.AppDeviceInfoJson = JsonSerializer.Serialize(deviceInfoList);
         context.Database.Update(app);
+    }
+    
+    /// <summary>
+    /// 使用新协议请求应用列表
+    /// </summary>
+    /// <param name="deviceId">设备 ID</param>
+    public void RequestAppList(string deviceId)
+    {
+        try
+        {
+            // 使用网络服务发送请求
+            if (networkService == null)
+            {
+                logger.LogError("网络服务为 null，无法发送应用列表请求：deviceId={deviceId}", deviceId);
+                return;
+            }
+            
+            networkService.SendAppListRequest(deviceId);
+            
+            logger.LogDebug("已发送应用列表请求：deviceId={deviceId}", deviceId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "发送应用列表请求时出错：deviceId={deviceId}", deviceId);
+        }
     }
     
     #region Helpers

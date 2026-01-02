@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Windows.Storage.Streams;
 
 namespace Sefirah.Utils;
@@ -79,16 +80,26 @@ public static class IconUtils
     /// <summary>
     /// Saves app icon bytes to the AppIcons folder and returns the file system path
     /// </summary>
-    /// <param name="bytes">App icon bytes to save</param>
-    /// <param name="fileName">Name of the app icon file</param>
-    /// <returns>File system path to the saved app icon file</returns>
+    /// <param name="appIconBase64">Base64 encoded app icon data</param>
+    /// <param name="appPackage">App package name</param>
     public static async void SaveAppIconToPathAsync(string? appIconBase64, string appPackage)
     {
         try
         {
             if (string.IsNullOrEmpty(appIconBase64)) return;
             
-            var bytes = Convert.FromBase64String(appIconBase64);
+            // 处理 base64 编码的图标数据
+            byte[] bytes;
+            try
+            {
+                bytes = Convert.FromBase64String(appIconBase64);
+            }
+            catch (FormatException)
+            {
+                // 忽略无效的 base64 字符串
+                return;
+            }
+            
             var appIconsFolder = await GetAppIconsFolderAsync();
             var file = await appIconsFolder.CreateFileAsync($"{appPackage}.png", CreationCollisionOption.ReplaceExisting);
             using var stream = await file.OpenAsync(FileAccessMode.ReadWrite);
@@ -98,6 +109,24 @@ public static class IconUtils
         }
         catch (Exception)
         {
+            // 忽略保存错误
         }
+    }
+    
+    /// <summary>
+    /// 构建图标请求对象
+    /// </summary>
+    /// <param name="packageName">应用包名</param>
+    /// <returns>图标请求 JSON 字符串</returns>
+    public static string BuildIconRequest(string packageName)
+    {
+        var requestObj = new
+        {
+            type = "ICON_REQUEST",
+            packageName = packageName,
+            time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+        };
+        
+        return JsonSerializer.Serialize(requestObj);
     }
 } 

@@ -48,19 +48,19 @@ public class WindowsPlaybackService(
 
             sessionManager.ConnectionStatusChanged += async (sender, args) =>
             {
-                if (args.IsConnected && args.Device.DeviceSettings?.MediaSessionSyncEnabled == true)
-                {
-                    foreach (var session in activeSessions.Values)
-                    {
-                        await UpdatePlaybackDataAsync(session);
-                    }
-                    foreach (var device in AudioDevices)
-                    {
-                        device.AudioDeviceType = AudioMessageType.New;
-                        string jsonMessage = SocketMessageSerializer.Serialize(device);
-                        sessionManager.SendMessage(args.Device.Id, jsonMessage);
-                    }
-                }
+                //if (args.IsConnected && args.Device.DeviceSettings?.MediaSessionSyncEnabled == true)
+                //{
+                    //foreach (var session in activeSessions.Values)
+                    //{
+                    //    await UpdatePlaybackDataAsync(session);
+                    //}
+                    //foreach (var device in AudioDevices)
+                    //{
+                    //    device.AudioDeviceType = AudioMessageType.New;
+                    //    string jsonMessage = SocketMessageSerializer.Serialize(device);
+                    //    sessionManager.SendMessage(args.Device.Id, jsonMessage);
+                   // }
+                //}
             };
 
             logger.LogInformation("播放服务初始化成功");

@@ -40,8 +40,8 @@ public sealed partial class AppsViewModel : BaseViewModel
         if (DeviceManager.ActiveDevice is null) return;
 
         IsLoading = true;
-        var message = new CommandMessage { CommandType = CommandType.RequestAppList };
-        SessionManager.SendMessage(DeviceManager.ActiveDevice!.Id, SocketMessageSerializer.Serialize(message));
+        // 使用新协议请求应用列表
+        RemoteAppsRepository.RequestAppList(DeviceManager.ActiveDevice!.Id);
     }
 
     public void PinApp(ApplicationInfo app)

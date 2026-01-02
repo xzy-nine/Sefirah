@@ -26,19 +26,8 @@ public abstract class BaseActionService(
 
     private void OnConnectionStatusChanged(object? sender, (PairedDevice Device, bool IsConnected) args)
     {
-        if (args.IsConnected)
-        {
-            var actions = generalSettingsService.Actions;
-            foreach (var action in actions)
-            {
-                var actionMessage = new ActionMessage 
-                { 
-                    ActionId = action.Id, 
-                    ActionName = action.Name 
-                };
-                sessionManager.SendMessage(args.Device.Id, SocketMessageSerializer.Serialize(actionMessage));
-            }
-        }
+        // 仅处理连接状态变化，不再自动发送所有动作
+        // 应用列表和图标同步通过专用方法处理
     }
 
     public virtual void HandleActionMessage(ActionMessage action)
