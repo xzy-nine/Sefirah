@@ -45,6 +45,15 @@ public sealed partial class MainPageViewModel : BaseViewModel
         }
     }
 
+    /// <summary>
+    /// 根据设备ID获取设备名称
+    /// </summary>
+    public string GetDeviceName(string deviceId)
+    {
+        var device = PairedDevices.FirstOrDefault(d => d.Id == deviceId);
+        return device?.Name ?? deviceId;
+    }
+
     #region Commands
 
     [RelayCommand]
@@ -122,10 +131,7 @@ public sealed partial class MainPageViewModel : BaseViewModel
     [RelayCommand]
     public void ClearAllNotifications()
     {
-        if (Device != null)
-        {
-            NotificationService.ClearAllNotification(Device);
-        }
+        NotificationService.ClearAllNotifications();
     }
 
     [RelayCommand]

@@ -32,7 +32,7 @@ public class NotificationService(
     private const int ICON_REQUEST_TIMEOUT = 3000; // 图标请求最长等待时间：3秒
 
     /// <summary>
-    /// Gets notifications for the currently active device session
+    /// Gets all notifications from all devices
     /// </summary>
     public ReadOnlyObservableCollection<Notification> NotificationHistory => new(activeNotifications);
 
@@ -47,8 +47,8 @@ public class NotificationService(
         {
             if (e.PropertyName is nameof(IDeviceManager.ActiveDevice) && deviceManager.ActiveDevice is not null)
             {
+                // 只确保设备通知已加载，但不更新活跃通知列表，因为活跃通知列表显示的是所有设备的通知
                 _ = EnsureNotificationsLoadedAsync(deviceManager.ActiveDevice);
-                UpdateActiveNotifications(deviceManager.ActiveDevice);
             }
         };
 
@@ -141,31 +141,33 @@ public class NotificationService(
                 }
 
                 await dispatcher.EnqueueAsync(async () =>
-                {
-                    await EnsureNotificationsLoadedAsync(device);
-                    var notifications = GetOrCreateNotificationCollection(device);
-                    var notification = await Notification.FromMessage(message);
-                    
-                    if (message.NotificationType == NotificationType.New && filter == NotificationFilter.ToastFeed)
-                    {
-                        // Check for existing notification in this device's collection
-                        var existingNotification = notifications.FirstOrDefault(n => n.Key == notification.Key);
-
-                        if (existingNotification is not null)
                         {
-                            // Update existing notification
-                            var index = notifications.IndexOf(existingNotification);
-                            if (existingNotification.Pinned)
+                            await EnsureNotificationsLoadedAsync(device);
+                            var notifications = GetOrCreateNotificationCollection(device);
+                            var notification = await Notification.FromMessage(message);
+                            notification.DeviceId = device.Id;
+                            notification.DeviceName = device.Name;
+                            
+                            if (message.NotificationType == NotificationType.New && filter == NotificationFilter.ToastFeed)
                             {
-                                notification.Pinned = true;
-                            }
-                            notifications[index] = notification;
-                        }
-                        else
-                        {
-                            // Add new notification
-                            notifications.Insert(0, notification);
-                        }
+                                // Check for existing notification in this device's collection
+                                var existingNotification = notifications.FirstOrDefault(n => n.Key == notification.Key);
+
+                                if (existingNotification is not null)
+                                {
+                                    // Update existing notification
+                                    var index = notifications.IndexOf(existingNotification);
+                                    if (existingNotification.Pinned)
+                                    {
+                                        notification.Pinned = true;
+                                    }
+                                    notifications[index] = notification;
+                                }
+                                else
+                                {
+                                    // Add new notification
+                                    notifications.Insert(0, notification);
+                                }
 #if WINDOWS
                         // Check if the app is active before showing the notification
                         if (device.DeviceSettings.IgnoreWindowsApps && await IsAppActiveAsync(message.AppName!)) return;
@@ -186,11 +188,8 @@ public class NotificationService(
                     
                     SortNotifications(device.Id);
                     
-                    // Update active notifications if this is for the active device
-                    if (deviceManager.ActiveDevice?.Id == device.Id)
-                    {
-                        UpdateActiveNotifications(deviceManager.ActiveDevice);
-                    }
+                    // Update all notifications
+                    UpdateActiveNotifications(deviceManager.ActiveDevice);
                 });
             }
             else if (message.NotificationType == NotificationType.Removed)
@@ -201,11 +200,8 @@ public class NotificationService(
                 {
                     await dispatcher.EnqueueAsync(() => notifications.Remove(notification));
                     notificationRepository.DeleteNotification(device.Id, message.NotificationKey);
-                    // Update active notifications if this is for the active device
-                    if (deviceManager.ActiveDevice?.Id == device.Id)
-                    {
-                        UpdateActiveNotifications(deviceManager.ActiveDevice);
-                    }
+                    // Update all notifications
+                    UpdateActiveNotifications(deviceManager.ActiveDevice);
                 }
             }
         }
@@ -298,6 +294,48 @@ public class NotificationService(
         }
     }
 
+    /// <summary>
+    /// 清除所有设备的全部通知
+    /// </summary>
+    public void ClearAllNotifications()
+    {
+        dispatcher.EnqueueAsync(() =>
+        {
+            try
+            {
+                // 清除所有设备的通知集合
+                foreach (var (deviceId, notifications) in deviceNotifications)
+                {
+                    notifications.Clear();
+                }
+                
+                // 清除活跃通知集合
+                activeNotifications.Clear();
+                
+                // 清除所有设备的通知历史
+                foreach (var device in deviceManager.PairedDevices)
+                {
+                    notificationRepository.ClearDeviceNotifications(device.Id);
+                    
+                    // 发送清除通知命令到设备
+                    if (device.ConnectionStatus)
+                    {
+                        var command = new CommandMessage { CommandType = CommandType.ClearNotifications };
+                        string jsonMessage = SocketMessageSerializer.Serialize(command);
+                        sessionManager.SendMessage(device.Id, jsonMessage);
+                        logger.LogInformation("已清除设备 {DeviceId} 的全部通知", device.Id);
+                    }
+                }
+                
+                ClearBadge();
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "清除所有设备通知时出错");
+            }
+        });
+    }
+
     public void ClearHistory(PairedDevice device)
     {
         dispatcher.EnqueueAsync(() =>
@@ -369,38 +407,46 @@ public class NotificationService(
         logger.LogDebug("已向设备 {DeviceId} 发送点击动作（通知键：{NotificationKey}）", device.Id, notificationKey);
     }
 
-    private void UpdateActiveNotifications(PairedDevice activeDevice)
+    private void UpdateActiveNotifications(PairedDevice? activeDevice = null)
     {
         dispatcher.EnqueueAsync(() =>
         {
             activeNotifications.Clear();
 
-            if (deviceNotifications.TryGetValue(activeDevice.Id, out var deviceNotifs))
+            // Add notifications from all devices
+            int totalNotifications = 0;
+            foreach (var (deviceId, notifications) in deviceNotifications)
             {
-                activeNotifications.AddRange(deviceNotifs);
-
-                if (activeDevice.DeviceSettings.ShowBadge)
-                {
-                    // Get the blank badge XML payload for a badge number
-                    XmlDocument badgeXml =
-                        BadgeUpdateManager.GetTemplateContent(BadgeTemplateType.BadgeNumber);
-
-                    // Set the value of the badge in the XML to our number
-                    XmlElement badgeElement = badgeXml.SelectSingleNode("/badge") as XmlElement;
-                    badgeElement.SetAttribute("value", deviceNotifs.Count.ToString());
-
-                    // Create the badge notification
-                    BadgeNotification badge = new(badgeXml);
-
-                    // Create the badge updater for the application
-                    BadgeUpdater badgeUpdater =
-                        BadgeUpdateManager.CreateBadgeUpdaterForApplication();
-
-                    // And update the badge
-                    badgeUpdater.Update(badge);
-                }
-
+                activeNotifications.AddRange(notifications);
+                totalNotifications += notifications.Count;
             }
+
+            // Update badge if there's an active device and it has badge enabled
+            if (activeDevice?.DeviceSettings.ShowBadge == true)
+            {
+                // Get the blank badge XML payload for a badge number
+                XmlDocument badgeXml =
+                    BadgeUpdateManager.GetTemplateContent(BadgeTemplateType.BadgeNumber);
+
+                // Set the value of the badge in the XML to our number
+                XmlElement badgeElement = badgeXml.SelectSingleNode("/badge") as XmlElement;
+                badgeElement.SetAttribute("value", totalNotifications.ToString());
+
+                // Create the badge notification
+                BadgeNotification badge = new(badgeXml);
+
+                // Create the badge updater for the application
+                BadgeUpdater badgeUpdater =
+                    BadgeUpdateManager.CreateBadgeUpdaterForApplication();
+
+                // And update the badge
+                badgeUpdater.Update(badge);
+            }
+
+            // Sort all notifications by timestamp (newest first)
+            var sortedNotifications = activeNotifications.OrderByDescending(n => n.TimeStamp).ToList();
+            activeNotifications.Clear();
+            activeNotifications.AddRange(sortedNotifications);
         });
     }
 
@@ -420,23 +466,31 @@ public class NotificationService(
             var notifications = new ObservableCollection<Notification>();
 
             foreach (var entity in stored)
-            {
-                var msg = SocketMessageSerializer.DeserializeMessage(entity.MessageJson) as NotificationMessage;
-                if (msg is null) continue;
+                {
+                    var msg = SocketMessageSerializer.DeserializeMessage(entity.MessageJson) as NotificationMessage;
+                    if (msg is null) continue;
 
-                var notif = await Notification.FromMessage(msg);
-                notif.Pinned = entity.Pinned;
-                notif.DeviceId = device.Id;
-                notifications.Add(notif);
-            }
+                    var notif = await Notification.FromMessage(msg);
+                    notif.Pinned = entity.Pinned;
+                    notif.DeviceId = device.Id;
+                    notif.DeviceName = device.Name;
+                    
+                    // 确保图标路径正确设置
+                    if (!string.IsNullOrEmpty(msg.AppPackage))
+                    {
+                        notif.IconPath = IconUtils.GetAppIconPath(msg.AppPackage);
+                        // 立即同步加载图标，确保历史通知能显示图标
+                        await notif.LoadIconAsync();
+                    }
+                    
+                    notifications.Add(notif);
+                }
 
             deviceNotifications[device.Id] = notifications;
             loadedDeviceIds.Add(device.Id);
 
-            if (deviceManager.ActiveDevice?.Id == device.Id)
-            {
-                UpdateActiveNotifications(device);
-            }
+            // Update all notifications, not just for the active device
+            UpdateActiveNotifications(deviceManager.ActiveDevice);
         }
         catch (Exception ex)
         {
@@ -498,6 +552,26 @@ public class NotificationService(
                 tcs.TrySetResult(true);
                 logger.LogDebug("已通知图标请求完成：{PackageName}", packageName);
             }
+            
+            // 更新所有使用该包名的通知的图标
+            dispatcher.EnqueueAsync(async () =>
+            {
+                // 遍历所有设备的通知
+                foreach (var (deviceIdKey, notifications) in deviceNotifications)
+                {
+                    // 查找使用该包名的通知
+                    var notificationsToUpdate = notifications.Where(n => n.AppPackage == packageName).ToList();
+                    foreach (var notification in notificationsToUpdate)
+                    {
+                        // 更新图标路径和图标
+                        notification.IconPath = IconUtils.GetAppIconPath(packageName);
+                        await notification.LoadIconAsync();
+                    }
+                }
+                
+                // 刷新所有通知
+                UpdateActiveNotifications(deviceManager.ActiveDevice);
+            });
         }
         catch (Exception ex)
         {

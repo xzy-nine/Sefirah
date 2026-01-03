@@ -399,10 +399,10 @@
                                                         FontWeight="Medium"
                                                         Text="{x:Bind AppName}" />
                                                     <StackPanel
-                                                        Grid.Column="1"
-                                                        HorizontalAlignment="Right"
-                                                        Orientation="Horizontal"
-                                                        Spacing="5">
+                                                    Grid.Column="1"
+                                                    HorizontalAlignment="Right"
+                                                    Orientation="Horizontal"
+                                                    Spacing="5">
                                                         <Button
                                                             x:Name="MoreButton"
                                                             Width="20"
@@ -520,6 +520,25 @@
                                                         </DataTemplate>
                                                     </ItemsRepeater.ItemTemplate>
                                                 </ItemsRepeater>
+                                                
+                                                <!--  设备按钮，显示通知所属设备名称  -->
+                                                <Button
+                                                    x:Name="DeviceButton"
+                                                    Margin="0,5,0,0"
+                                                    Padding="8,3"
+                                                    HorizontalAlignment="Left"
+                                                    Background="Transparent"
+                                                    BorderBrush="Gray"
+                                                    BorderThickness="1"
+                                                    Click="OpenAppClick"
+                                                    CommandParameter="{x:Bind}"
+                                                    CornerRadius="4"
+                                                    FontSize="12"
+                                                    ToolTipService.ToolTip="在应用程序中打开">
+                                                    <TextBlock
+                                                        Text="{x:Bind DeviceName}"
+                                                        TextWrapping="NoWrap" />
+                                                </Button>
                                             </StackPanel>
                                             <StackPanel
                                                 x:Name="ActionsPanel"

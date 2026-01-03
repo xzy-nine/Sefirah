@@ -1,3 +1,4 @@
+using CommunityToolkit.WinUI;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Sefirah.Data.Enums;
 using Sefirah.Extensions;
@@ -6,10 +7,13 @@ using Sefirah.Utils;
 
 namespace Sefirah.Data.Models;
 
-public class Notification
+public partial class Notification : ObservableObject
 {
     public string Key { get; set; } = string.Empty;
-    public bool Pinned { get; set; } = false;
+    
+    [ObservableProperty]
+    private bool pinned = false;
+    
     public string? TimeStamp { get; set; }
     public NotificationType Type { get; set; }
     public string? AppName { get; set; }
@@ -22,9 +26,15 @@ public class Notification
     public string? GroupKey { get; set; }
     public List<NotificationAction> Actions { get; set; } = [];
     public string? ReplyResultKey { get; set; }
-    public BitmapImage? Icon { get; set; }
-    public string? IconPath { get; set; }
+    
+    [ObservableProperty]
+    private BitmapImage? icon;
+    
+    [ObservableProperty]
+    private string? iconPath;
+    
     public string? DeviceId { get; set; }
+    public string? DeviceName { get; set; }
 
     public bool ShouldShowTitle
     {

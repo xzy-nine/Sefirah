@@ -124,7 +124,18 @@ public sealed partial class MainPage : Page
 
     private async void OpenAppClick(object sender, RoutedEventArgs e)
     {   
-        if (sender is MenuFlyoutItem menuItem && menuItem.DataContext is Notification notification)
+        Notification notification = null;
+        
+        if (sender is MenuFlyoutItem menuItem && menuItem.DataContext is Notification menuItemNotification)
+        {
+            notification = menuItemNotification;
+        }
+        else if (sender is Button button && button.CommandParameter is Notification buttonNotification)
+        {
+            notification = buttonNotification;
+        }
+        
+        if (notification != null)
         {
             await ViewModel.OpenApp(notification);
         }
