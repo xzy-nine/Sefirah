@@ -307,29 +307,48 @@ public class AdbService(
             string androidId = string.Empty;
             try
             {
-                var androidIdReceiver = new ConsoleOutputReceiver();
+                logger.LogInformation($"开始获取设备 {deviceData.Serial} 的 UUID");
+                var uuidReceiver = new ConsoleOutputReceiver();
 
-                // adb shell cat /storage/emulated/0/Android/data/com.castle.sefirah/files/device_info.txt
-                // Get the Android ID from the device_info.txt file since we can't directly access the android id of the App 
-                await adbClient.ExecuteShellCommandAsync(deviceData, "cat /storage/emulated/0/Android/data/com.castle.sefirah/files/device_info.txt", androidIdReceiver);
-                var id = androidIdReceiver.ToString().Trim();
+                // adb shell cat /storage/emulated/0/Android/data/com.xzyht.notifyrelay/files/device_info.txt
+                // Get the UUID from the device_info.txt file since we can't directly access the UUID of the App 
+                string adbCommand = "cat /storage/emulated/0/Android/data/com.xzyht.notifyrelay/files/device_info.txt";
+                logger.LogInformation($"执行 ADB 命令：{adbCommand}");
+                await adbClient.ExecuteShellCommandAsync(deviceData, adbCommand, uuidReceiver);
+                var rawOutput = uuidReceiver.ToString();
+                var id = rawOutput.Trim();
+                logger.LogInformation($"ADB 命令输出：'{rawOutput}'，处理后：'{id}'");
                 if (!string.IsNullOrEmpty(id))
                 {
-                    // Extract the Android ID from the output
+                    // Extract the UUID from the output
                     androidId = id;
+                    logger.LogInformation($"成功获取设备 {deviceData.Serial} 的 UUID：{androidId}");
+                }
+                else
+                {
+                    logger.LogWarning($"设备 {deviceData.Serial} 的 UUID 为空");
                 }
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, $"获取 Android ID 时出错：{deviceData.Serial}");
+                logger.LogError(ex, $"获取 UUID 时出错：{deviceData.Serial}");
             }
 
             // Look for paired devices with matching model
             if (string.IsNullOrEmpty(androidId) && fullDeviceData.Model != null)
             {
                 var deviceModel = fullDeviceData.Model;
+                logger.LogInformation($"Android ID 为空，尝试通过设备型号 '{deviceModel}' 匹配已配对设备");
 
                 var pairedDevices = deviceManager.PairedDevices;
+                logger.LogInformation($"当前已配对设备数量：{pairedDevices.Count}");
+                
+                // Log paired devices for debugging
+                foreach (var pd in pairedDevices)
+                {
+                    logger.LogInformation($"已配对设备：ID='{pd.Id}'，型号='{pd.Model}'");
+                }
+                
                 var matchingDevice = pairedDevices.FirstOrDefault(pd =>
                     !string.IsNullOrEmpty(pd.Model) &&
                     (pd.Model.Equals(deviceModel, StringComparison.OrdinalIgnoreCase) ||
@@ -339,10 +358,11 @@ public class AdbService(
                 if (matchingDevice != null)
                 {
                     androidId = matchingDevice.Id;
+                    logger.LogInformation($"通过型号匹配成功：设备型号 '{deviceModel}' 匹配到已配对设备 ID='{androidId}'，型号='{matchingDevice.Model}'");
                 }
                 else
                 {
-                    logger.LogWarning($"未找到与型号匹配的配对设备：{deviceModel}");
+                    logger.LogWarning($"未找到与型号 '{deviceModel}' 匹配的配对设备");
                     androidId = string.Empty;
                 }
             }
@@ -356,6 +376,16 @@ public class AdbService(
                 Type = fullDeviceData.Serial.Contains(':') || fullDeviceData.Serial.Contains("tcp") ? DeviceType.WIFI : DeviceType.USB,
                 DeviceData = fullDeviceData
             };
+            
+            // 添加日志，便于调试
+            logger.LogInformation($"生成 ADB 设备对象：序列号='{device.Serial}'，型号='{device.Model}'，Android ID='{device.AndroidId}'，在线状态='{device.IsOnline}'");
+            
+            // 检查是否有已配对设备匹配此 ADB 设备
+            var allPairedDevices = deviceManager.PairedDevices;
+            foreach (var pd in allPairedDevices)
+            {
+                logger.LogInformation($"检查已配对设备：ID='{pd.Id}'，型号='{pd.Model}'，是否匹配 ADB 设备：{pd.HasAdbConnection}");
+            }
             
             return device;
         }

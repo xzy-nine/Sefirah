@@ -123,20 +123,48 @@ public partial class PairedDevice : ObservableObject
         {
             try
             {
-                return adbService?.AdbDevices.Any(adbDevice => 
-                    adbDevice.IsOnline && 
-                    (
-                        (!string.IsNullOrEmpty(adbDevice.AndroidId) && adbDevice.AndroidId == Id) ||
-                        (string.IsNullOrEmpty(adbDevice.AndroidId) && 
-                         !string.IsNullOrEmpty(adbDevice.Model) && 
-                         !string.IsNullOrEmpty(Model) &&
-                         (Model.Equals(adbDevice.Model, StringComparison.OrdinalIgnoreCase) ||
-                          Model.Contains(adbDevice.Model, StringComparison.OrdinalIgnoreCase) ||
-                          adbDevice.Model.Contains(Model, StringComparison.OrdinalIgnoreCase)))
-                    )) ?? false;
+                if (adbService == null)
+                {
+                    return false;
+                }
+                
+                // 添加日志，便于调试
+                var pairedDeviceId = Id;
+                var pairedDeviceModel = Model;
+                var adbDevicesCount = adbService.AdbDevices.Count;
+                
+                System.Diagnostics.Debug.WriteLine($"检查 ADB 连接：已配对设备 ID='{pairedDeviceId}'，型号='{pairedDeviceModel}'");
+                System.Diagnostics.Debug.WriteLine($"当前 ADB 设备数量：{adbDevicesCount}");
+                
+                foreach (var adbDevice in adbService.AdbDevices)
+                {
+                    System.Diagnostics.Debug.WriteLine($"ADB 设备：序列号='{adbDevice.Serial}'，型号='{adbDevice.Model}'，Android ID='{adbDevice.AndroidId}'，在线状态='{adbDevice.IsOnline}'");
+                    
+                    // 检查匹配条件
+                    var isOnline = adbDevice.IsOnline;
+                    var androidIdMatch = !string.IsNullOrEmpty(adbDevice.AndroidId) && adbDevice.AndroidId == pairedDeviceId;
+                    var modelMatch = string.IsNullOrEmpty(adbDevice.AndroidId) && 
+                                     !string.IsNullOrEmpty(adbDevice.Model) && 
+                                     !string.IsNullOrEmpty(pairedDeviceModel) &&
+                                     (pairedDeviceModel.Equals(adbDevice.Model, StringComparison.OrdinalIgnoreCase) ||
+                                      pairedDeviceModel.Contains(adbDevice.Model, StringComparison.OrdinalIgnoreCase) ||
+                                      adbDevice.Model.Contains(pairedDeviceModel, StringComparison.OrdinalIgnoreCase));
+                    
+                    System.Diagnostics.Debug.WriteLine($"  - 在线：{isOnline}，Android ID 匹配：{androidIdMatch}，型号匹配：{modelMatch}");
+                    
+                    if (isOnline && (androidIdMatch || modelMatch))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"  - 设备匹配成功！");
+                        return true;
+                    }
+                }
+                
+                System.Diagnostics.Debug.WriteLine("  - 未找到匹配的 ADB 设备");
+                return false;
             }
-            catch
+            catch (Exception ex)
             {
+                System.Diagnostics.Debug.WriteLine($"检查 ADB 连接时出错：{ex.Message}");
                 return false;
             }
         }
