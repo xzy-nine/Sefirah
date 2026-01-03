@@ -49,22 +49,32 @@ public static class UserInformation
                 Debug.WriteLine($"Error getting user avatar: {ex}");
             }
 
-            // Try to get the name using properties
-            var properties = await currentUser.GetPropertiesAsync(["FirstName", "DisplayName", "AccountName"]);
-
-            if (properties.Any())
+            // 第一优先级：使用系统机器名作为设备名
+            string machineName = Environment.MachineName;
+            if (!string.IsNullOrEmpty(machineName))
             {
-                if (properties.TryGetValue("FirstName", out object? value) && 
-                    value is string firstNameProperty &&
-                    !string.IsNullOrEmpty(firstNameProperty))
+                name = machineName;
+            }
+            else
+            {
+                // 原有逻辑作为兜底
+                // Try to get the name using properties
+                var properties = await currentUser.GetPropertiesAsync(["FirstName", "DisplayName", "AccountName"]);
+
+                if (properties.Any())
                 {
-                    name = firstNameProperty;
-                }
-                else
-                {
-                    name = properties["DisplayName"] as string
-                        ?? properties["AccountName"] as string
-                        ?? Environment.UserName;
+                    if (properties.TryGetValue("FirstName", out object? value) && 
+                        value is string firstNameProperty &&
+                        !string.IsNullOrEmpty(firstNameProperty))
+                    {
+                        name = firstNameProperty;
+                    }
+                    else
+                    {
+                        name = properties["DisplayName"] as string
+                            ?? properties["AccountName"] as string
+                            ?? Environment.UserName;
+                    }
                 }
             }
 

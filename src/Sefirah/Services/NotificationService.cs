@@ -145,52 +145,120 @@ public class NotificationService(
                             await EnsureNotificationsLoadedAsync(device);
                             var notifications = GetOrCreateNotificationCollection(device);
                             var notification = await Notification.FromMessage(message);
-                            notification.DeviceId = device.Id;
-                            notification.DeviceName = device.Name;
+                            notification.AddSourceDevice(device.Id, device.Name);
+                            
+                            // 确保图标路径和图标正确设置，无论设备是否活跃
+                            if (!string.IsNullOrEmpty(message.AppPackage))
+                            {
+                                string iconPath = IconUtils.GetAppIconPath(message.AppPackage);
+                                notification.IconPath = iconPath;
+                                
+                                // 确保图标文件存在
+                                if (IconUtils.AppIconExists(message.AppPackage))
+                                {
+                                    // 立即同步加载图标，确保通知能显示图标
+                                    await notification.LoadIconAsync();
+                                }
+                            }
+                            
+                            // 检查是否存在内容相同的现有通知（跨设备聚合）
+                            var contentMatchNotification = activeNotifications.FirstOrDefault(n => 
+                                n.AppPackage == notification.AppPackage &&
+                                n.Title == notification.Title &&
+                                n.Text == notification.Text &&
+                                n.Type == NotificationType.New);
+                            
+                            // 只有当通知是新的（即之前没有相同内容的通知）时，才会发送到Windows通知中心
+                            bool shouldSendNotification = contentMatchNotification is null;
+                            
+                            bool shouldSaveNotification = true;
                             
                             if (message.NotificationType == NotificationType.New && filter == NotificationFilter.ToastFeed)
                             {
-                                // Check for existing notification in this device's collection
-                                var existingNotification = notifications.FirstOrDefault(n => n.Key == notification.Key);
-
-                                if (existingNotification is not null)
+                                if (contentMatchNotification is not null)
                                 {
-                                    // Update existing notification
-                                    var index = notifications.IndexOf(existingNotification);
-                                    if (existingNotification.Pinned)
+                                    // 聚合通知：添加设备到现有通知的来源设备列表
+                                    contentMatchNotification.AddSourceDevice(device.Id, device.Name);
+                                    
+                                    // 更新设备本地通知集合中的对应通知
+                                    var existingNotification = notifications.FirstOrDefault(n => n.Key == contentMatchNotification.Key);
+                                    if (existingNotification is not null)
                                     {
-                                        notification.Pinned = true;
+                                        var index = notifications.IndexOf(existingNotification);
+                                        notifications[index] = contentMatchNotification;
                                     }
-                                    notifications[index] = notification;
+                                    else
+                                    {
+                                        notifications.Insert(0, contentMatchNotification);
+                                    }
+                                    
+                                    // 使用已存在通知的tag和groupKey
+                                    message.NotificationKey = contentMatchNotification.Key;
+                                    message.Tag = contentMatchNotification.Tag;
+                                    message.GroupKey = contentMatchNotification.GroupKey;
+                                    
+                                    // 只更新本地存储，不发送到Windows通知中心
+                                    logger.LogDebug("相同内容的通知已存在，仅存储不发送到Windows通知中心");
                                 }
                                 else
                                 {
-                                    // Add new notification
-                                    notifications.Insert(0, notification);
-                                }
-#if WINDOWS
-                        // Check if the app is active before showing the notification
-                        if (device.DeviceSettings.IgnoreWindowsApps && await IsAppActiveAsync(message.AppName!)) return;
-#endif
-                        await platformNotificationHandler.ShowRemoteNotification(message, device.Id);
-                    }
-                    else if ((message.NotificationType is NotificationType.Active || message.NotificationType is NotificationType.New)
-                        && (filter is NotificationFilter.Feed || filter is NotificationFilter.ToastFeed))
-                    {
-                        notifications.Add(notification);
-                    }
-                    else
-                    {
-                        return;
-                    }
+                                    // 检查设备本地是否已有相同Key的通知
+                                    var existingNotification = notifications.FirstOrDefault(n => n.Key == notification.Key);
 
-                    notificationRepository.UpsertNotification(device.Id, message, notification.Pinned);
-                    
-                    SortNotifications(device.Id);
-                    
-                    // Update all notifications
-                    UpdateActiveNotifications(deviceManager.ActiveDevice);
-                });
+                                    if (existingNotification is not null)
+                                    {
+                                        // 更新现有通知
+                                        var index = notifications.IndexOf(existingNotification);
+                                        if (existingNotification.Pinned)
+                                        {
+                                            notification.Pinned = true;
+                                        }
+                                        notifications[index] = notification;
+                                    }
+                                    else
+                                    {
+                                        // 添加新通知
+                                        notifications.Insert(0, notification);
+                                    }
+                                    
+                                    // 如果是新通知，使用内容生成唯一的tag和groupKey
+                                    string contentHash = $"{notification.AppPackage}|{notification.Title}|{notification.Text}";
+                                    message.Tag = contentHash;
+                                    message.GroupKey = contentHash;
+                                }
+                            }
+                            else if ((message.NotificationType is NotificationType.Active || message.NotificationType is NotificationType.New)
+                                && (filter is NotificationFilter.Feed || filter is NotificationFilter.ToastFeed))
+                            {
+                                notifications.Add(notification);
+                            }
+                            else
+                            {
+                                shouldSaveNotification = false;
+                            }
+                            
+                            if (shouldSaveNotification)
+                            {
+                                notificationRepository.UpsertNotification(device.Id, message, notification.Pinned);
+                                
+                                SortNotifications(device.Id);
+                                
+                                // Update all notifications
+                                UpdateActiveNotifications(deviceManager.ActiveDevice);
+                                
+                                #if WINDOWS
+                                // Check if the app is active before showing the notification
+                                if (device.DeviceSettings.IgnoreWindowsApps && await IsAppActiveAsync(message.AppName!)) return;
+                                #endif
+                                
+                                // 只有当通知是新的时，才会发送到Windows通知中心
+                                if (shouldSendNotification)
+                                {
+                                    // 发送通知到Windows通知中心
+                                    await platformNotificationHandler.ShowRemoteNotification(message, device.Id);
+                                }
+                            }
+                        });
             }
             else if (message.NotificationType == NotificationType.Removed)
             {
@@ -413,13 +481,69 @@ public class NotificationService(
         {
             activeNotifications.Clear();
 
-            // Add notifications from all devices
+            // 聚合所有设备的通知，相同内容的通知只保留一个，添加多个设备来源
+            Dictionary<string, Notification> aggregatedNotifications = [];
             int totalNotifications = 0;
+
+            // 遍历所有设备的通知
             foreach (var (deviceId, notifications) in deviceNotifications)
             {
-                activeNotifications.AddRange(notifications);
                 totalNotifications += notifications.Count;
+                
+                // 遍历每个设备的通知
+                foreach (var notification in notifications)
+                {
+                    // 使用 AppPackage + Title + Text 作为聚合键
+                    string aggregationKey = $"{notification.AppPackage}|{notification.Title}|{notification.Text}|{notification.Type}";
+                    
+                    if (aggregatedNotifications.TryGetValue(aggregationKey, out var existingNotification))
+                    {
+                        // 如果已存在相同内容的通知，合并设备来源
+                        foreach (var sourceDevice in notification.SourceDevices)
+                        {
+                            existingNotification.AddSourceDevice(sourceDevice.DeviceId, sourceDevice.DeviceName);
+                        }
+                        
+                        // 确保现有通知有图标，如果新通知有图标而现有通知没有
+                        if (existingNotification.Icon == null && notification.Icon != null)
+                        {
+                            existingNotification.Icon = notification.Icon;
+                            existingNotification.IconPath = notification.IconPath;
+                        }
+                        // 如果现有通知没有图标路径，从新通知获取
+                        if (string.IsNullOrEmpty(existingNotification.IconPath) && !string.IsNullOrEmpty(notification.IconPath))
+                        {
+                            existingNotification.IconPath = notification.IconPath;
+                            // 尝试加载图标
+                            _ = existingNotification.LoadIconAsync();
+                        }
+                    }
+                    else
+                    {
+                        // 如果不存在，添加到聚合字典中
+                        aggregatedNotifications[aggregationKey] = notification;
+                    }
+                }
             }
+
+            // 确保所有聚合后的通知都能正确加载图标
+            foreach (var notification in aggregatedNotifications.Values)
+            {
+                if (notification.Icon == null && !string.IsNullOrEmpty(notification.AppPackage))
+                {
+                    // 确保图标路径正确
+                    notification.IconPath = IconUtils.GetAppIconPath(notification.AppPackage);
+                    // 检查图标文件是否存在，如果存在则尝试加载图标
+                    if (IconUtils.AppIconExists(notification.AppPackage))
+                    {
+                        // 异步加载图标，不阻塞主线程
+                        _ = notification.LoadIconAsync();
+                    }
+                }
+            }
+
+            // 将聚合后的通知添加到活跃通知列表
+            activeNotifications.AddRange(aggregatedNotifications.Values);
 
             // Update badge if there's an active device and it has badge enabled
             if (activeDevice?.DeviceSettings.ShowBadge == true)
@@ -472,15 +596,31 @@ public class NotificationService(
 
                     var notif = await Notification.FromMessage(msg);
                     notif.Pinned = entity.Pinned;
-                    notif.DeviceId = device.Id;
-                    notif.DeviceName = device.Name;
+                    notif.AddSourceDevice(device.Id, device.Name);
                     
                     // 确保图标路径正确设置
                     if (!string.IsNullOrEmpty(msg.AppPackage))
                     {
-                        notif.IconPath = IconUtils.GetAppIconPath(msg.AppPackage);
-                        // 立即同步加载图标，确保历史通知能显示图标
-                        await notif.LoadIconAsync();
+                        // 直接设置图标路径，确保所有设备的通知都能访问到正确的图标路径
+                        string iconPath = IconUtils.GetAppIconPath(msg.AppPackage);
+                        notif.IconPath = iconPath;
+                        
+                        // 确保图标文件存在
+                        if (IconUtils.AppIconExists(msg.AppPackage))
+                        {
+                            // 立即同步加载图标，确保历史通知能显示图标
+                            await notif.LoadIconAsync();
+                        }
+                        else
+                        {
+                            // 如果图标不存在，尝试异步请求图标
+                            logger.LogDebug("通知图标不存在，尝试请求图标: {AppPackage}", msg.AppPackage);
+                            // 发送图标请求
+                            networkService.SendIconRequest(device.Id, msg.AppPackage);
+                            // 延迟一段时间后再次尝试加载图标
+                            await Task.Delay(500);
+                            await notif.LoadIconAsync();
+                        }
                     }
                     
                     notifications.Add(notif);

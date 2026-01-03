@@ -156,8 +156,12 @@ public sealed partial class MainPageViewModel : BaseViewModel
 
     #region Methods
 
-    public async Task OpenApp(Notification notification)
+    public async Task OpenApp(Notification notification, string? deviceId = null)
     {
+        // 如果未指定设备ID，使用当前活跃设备
+        var targetDevice = deviceId != null ? DeviceManager.FindDeviceById(deviceId) : Device;
+        if (targetDevice == null) return;
+        
         var notificationToInvoke = new NotificationMessage
         {
             NotificationType = NotificationType.Invoke,
@@ -168,14 +172,14 @@ public sealed partial class MainPageViewModel : BaseViewModel
         {
             appIcon = IconUtils.GetAppIconFilePath(notification.AppPackage);
         }
-        var started = await ScreenMirrorService.StartScrcpy(Device!, $"--new-display --start-app={notification.AppPackage}", appIcon);
+        var started = await ScreenMirrorService.StartScrcpy(targetDevice, $"--new-display --start-app={notification.AppPackage}", appIcon);
 
         // Scrcpy doesn't have a way of opening notifications afaik, so we will just have the notification listener on Android to open it for us
         // Plus we have to wait (2s will do ig?) until the app is actually launched to send the intent for launching the notification since Google added a lot more restrictions in this particular case
-        if (started && Device!.ConnectionStatus)
+        if (started && targetDevice.ConnectionStatus)
         {
             await Task.Delay(2000);
-            SessionManager.SendMessage(Device.Id, SocketMessageSerializer.Serialize(notificationToInvoke));
+            SessionManager.SendMessage(targetDevice.Id, SocketMessageSerializer.Serialize(notificationToInvoke));
         }
     }
 

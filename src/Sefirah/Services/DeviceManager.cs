@@ -232,16 +232,41 @@ public partial class DeviceManager(ILogger<DeviceManager> logger, DeviceReposito
                     repository.AddOrUpdateLocalDevice(localDevice);
                 }
 
-                if (string.IsNullOrWhiteSpace(localDevice.DeviceId) && persistedId is not null)
+                // 确保DeviceId在数据库和本地设置中保持一致
+                bool deviceIdChanged = false;
+                
+                // 情况1：本地设备的DeviceId为空，优先使用本地设置中的persistedId
+                if (string.IsNullOrWhiteSpace(localDevice.DeviceId))
                 {
-                    localDevice.DeviceId = persistedId;
+                    if (persistedId is not null)
+                    {
+                        localDevice.DeviceId = persistedId;
+                        deviceIdChanged = true;
+                    }
+                    else
+                    {
+                        // 如果本地设置中也没有persistedId，生成一个新的GUID
+                        localDevice.DeviceId = Guid.NewGuid().ToString();
+                        deviceIdChanged = true;
+                    }
+                }
+                // 情况2：本地设备的DeviceId不为空，但本地设置中的persistedId不同
+                else if (persistedId is not null && persistedId != localDevice.DeviceId)
+                {
+                    // 以数据库中的DeviceId为准，更新本地设置
+                    persistedId = localDevice.DeviceId;
+                }
+                
+                // 如果DeviceId发生了变化，更新数据库和本地设置
+                if (deviceIdChanged)
+                {
                     repository.AddOrUpdateLocalDevice(localDevice);
                 }
-                else if (string.IsNullOrWhiteSpace(persistedId))
-                {
-                    localSettings.Values[nameof(LocalDeviceEntity.DeviceId)] = localDevice.DeviceId;
-                }
+                
+                // 确保本地设置中始终有DeviceId
+                localSettings.Values[nameof(LocalDeviceEntity.DeviceId)] = localDevice.DeviceId;
 
+                // 处理PublicKey
                 if (persistedPublicKey is not null && persistedPublicKey != currentKey)
                 {
                     localDevice.PublicKey = Encoding.UTF8.GetBytes(persistedPublicKey);

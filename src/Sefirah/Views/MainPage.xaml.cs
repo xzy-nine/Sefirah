@@ -156,6 +156,28 @@ public sealed partial class MainPage : Page
             ViewModel.ToggleNotificationPin(notification);
         }
     }
+    
+    private async void DeviceButtonClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button button)
+        {
+            // 找到父级的Notification对象
+            DependencyObject parent = VisualTreeHelper.GetParent(button);
+            while (parent != null && !(parent is Border))
+            {
+                parent = VisualTreeHelper.GetParent(parent);
+            }
+            
+            if (parent is Border border && border.DataContext is Notification notification)
+            {
+                // 获取按钮的Tag，它包含设备ID和设备名称
+                if (button.Tag is SourceDevice sourceDevice)
+                {
+                    await ViewModel.OpenApp(notification, sourceDevice.DeviceId);
+                }
+            }
+        }
+    }
 
     private void SendButton_Click(object sender, RoutedEventArgs e)
     {
