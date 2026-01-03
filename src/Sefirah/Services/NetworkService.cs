@@ -972,6 +972,13 @@ public class NetworkService(
 
             var packageName = packageProp.GetString();
             if (string.IsNullOrWhiteSpace(packageName)) return false;
+            
+            // 过滤超级岛通知，识别段是'superisland:'
+            if (packageName.StartsWith("superisland:"))
+            {
+                logger.LogDebug("丢弃超级岛通知: {PackageName}", packageName);
+                return false;
+            }
 
             var timeMs = root.TryGetProperty("time", out var timeProp)
                 ? timeProp.GetInt64()

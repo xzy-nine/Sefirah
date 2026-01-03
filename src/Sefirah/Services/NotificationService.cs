@@ -88,6 +88,13 @@ public class NotificationService(
         { 
             if (message.Title is not null && message.AppPackage is not null)
             {
+                // 过滤超级岛通知，识别段是'superisland:'
+                if (message.AppPackage.StartsWith("superisland:"))
+                {
+                    logger.LogDebug("丢弃超级岛通知: {AppPackage}", message.AppPackage);
+                    return;
+                }
+
                 var filter = remoteAppsRepository.GetAppNotificationFilterAsync(message.AppPackage, device.Id)
                 ?? await remoteAppsRepository.AddOrUpdateApplicationForDevice(device.Id, message.AppPackage, message.AppName!, message.AppIcon);
 
