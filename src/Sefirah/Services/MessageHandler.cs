@@ -257,6 +257,9 @@ public class MessageHandler(
                     // 保存图标
                     await IconUtils.SaveAppIconToPathAsync(iconData, packageName);
                     savedCount++;
+                    
+                    // 通知等待的图标请求任务
+                    notificationService.HandleIconResponse(device.Id, packageName);
                 }
                 logger.LogDebug("已保存 {savedCount} 个应用图标", savedCount);
             }
@@ -294,6 +297,9 @@ public class MessageHandler(
                 // 保存图标
                 await IconUtils.SaveAppIconToPathAsync(iconData, packageName);
                 logger.LogDebug("已保存应用 {packageName} 的图标", packageName);
+                
+                // 通知等待的图标请求任务
+                notificationService.HandleIconResponse(device.Id, packageName);
             }
         }
         catch (Exception ex)

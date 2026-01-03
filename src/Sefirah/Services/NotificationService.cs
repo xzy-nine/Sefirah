@@ -4,6 +4,7 @@ using Sefirah.Data.AppDatabase.Repository;
 using Sefirah.Data.Contracts;
 using Sefirah.Data.Enums;
 using Sefirah.Data.Models;
+using Sefirah.Utils;
 using Sefirah.Utils.Serialization;
 using Windows.Data.Xml.Dom;
 using Windows.System;
@@ -17,13 +18,18 @@ public class NotificationService(
     IDeviceManager deviceManager,
     IPlatformNotificationHandler platformNotificationHandler,
     RemoteAppRepository remoteAppsRepository,
-    NotificationRepository notificationRepository) : INotificationService
+    NotificationRepository notificationRepository,
+    INetworkService networkService) : INotificationService
 {
     private readonly Dictionary<string, ObservableCollection<Notification>> deviceNotifications = [];
     private readonly Microsoft.UI.Dispatching.DispatcherQueue dispatcher = App.MainWindow.DispatcherQueue;
     
     private readonly ObservableCollection<Notification> activeNotifications = [];
     private readonly HashSet<string> loadedDeviceIds = [];
+    
+    // 跟踪图标请求状态的字典，key: packageName|deviceId, value: TaskCompletionSource<bool>
+    private readonly Dictionary<string, TaskCompletionSource<bool>> pendingIconRequests = [];
+    private const int ICON_REQUEST_TIMEOUT = 3000; // 图标请求最长等待时间：3秒
 
     /// <summary>
     /// Gets notifications for the currently active device session
@@ -86,6 +92,46 @@ public class NotificationService(
                 ?? await remoteAppsRepository.AddOrUpdateApplicationForDevice(device.Id, message.AppPackage, message.AppName!, message.AppIcon);
 
                 if (filter == NotificationFilter.Disabled) return;
+
+                // 检查是否需要请求图标
+                bool needIconRequest = !string.IsNullOrEmpty(message.AppPackage) && !IconUtils.AppIconExists(message.AppPackage);
+                TaskCompletionSource<bool>? iconRequestTcs = null;
+                string? requestKey = null;
+                
+                if (needIconRequest)
+                {
+                    // 创建 TaskCompletionSource 用于跟踪图标请求状态
+                    requestKey = $"{message.AppPackage}|{device.Id}";
+                    iconRequestTcs = new TaskCompletionSource<bool>();
+                    pendingIconRequests[requestKey] = iconRequestTcs;
+                    
+                    // 发送图标请求
+                    networkService.SendIconRequest(device.Id, message.AppPackage);
+                }
+
+                // 等待图标请求完成，最长等待 3 秒
+                if (iconRequestTcs != null)
+                {
+                    var timeoutTask = Task.Delay(ICON_REQUEST_TIMEOUT);
+                    var completedTask = await Task.WhenAny(iconRequestTcs.Task, timeoutTask);
+                    
+                    if (completedTask == timeoutTask)
+                    {
+                        // 超时
+                        logger.LogDebug("图标请求超时，继续显示通知：{AppPackage}", message.AppPackage);
+                    }
+                    else
+                    {
+                        // 图标请求完成
+                        logger.LogDebug("图标请求完成，显示通知：{AppPackage}", message.AppPackage);
+                    }
+                    
+                    // 清理请求状态
+                    if (requestKey != null)
+                    {
+                        pendingIconRequests.Remove(requestKey);
+                    }
+                }
 
                 await dispatcher.EnqueueAsync(async () =>
                 {
@@ -425,4 +471,27 @@ public class NotificationService(
         }
     }
 #endif
+
+    /// <summary>
+    /// 处理图标响应，通知等待的图标请求任务
+    /// </summary>
+    /// <param name="deviceId">设备 ID</param>
+    /// <param name="packageName">应用包名</param>
+    public void HandleIconResponse(string deviceId, string packageName)
+    {
+        try
+        {
+            string requestKey = $"{packageName}|{deviceId}";
+            if (pendingIconRequests.TryGetValue(requestKey, out var tcs))
+            {
+                // 完成等待的任务
+                tcs.TrySetResult(true);
+                logger.LogDebug("已通知图标请求完成：{PackageName}", packageName);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "处理图标响应通知时出错");
+        }
+    }
 }

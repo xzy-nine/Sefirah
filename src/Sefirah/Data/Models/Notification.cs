@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using Sefirah.Data.Enums;
 using Sefirah.Extensions;
 using Sefirah.Helpers;
+using Sefirah.Utils;
 
 namespace Sefirah.Data.Models;
 
@@ -22,6 +23,7 @@ public class Notification
     public List<NotificationAction> Actions { get; set; } = [];
     public string? ReplyResultKey { get; set; }
     public BitmapImage? Icon { get; set; }
+    public string? IconPath { get; set; }
     public string? DeviceId { get; set; }
 
     public bool ShouldShowTitle
@@ -58,16 +60,34 @@ public class Notification
             ReplyResultKey = message.ReplyResultKey
         };
 
-        // Handle icon conversion
-        if (!string.IsNullOrEmpty(message.LargeIcon))
+        // 设置图标路径，复用应用列表的已有图标
+        if (!string.IsNullOrEmpty(message.AppPackage))
         {
-            notification.Icon = await Convert.FromBase64String(message.LargeIcon).ToBitmapAsync();
+            notification.IconPath = IconUtils.GetAppIconPath(message.AppPackage);
+            await notification.LoadIconAsync();
         }
-        else if (!string.IsNullOrEmpty(message.AppIcon))
-        {
-            notification.Icon = await Convert.FromBase64String(message.AppIcon).ToBitmapAsync();
-        }
+
         return notification;
+    }
+
+    /// <summary>
+    /// 从本地加载图标
+    /// </summary>
+    public async Task LoadIconAsync()
+    {
+        if (string.IsNullOrEmpty(IconPath)) return;
+        
+        try
+        {
+            // 尝试从本地加载图标
+            var bitmapImage = new BitmapImage();
+            bitmapImage.UriSource = new Uri(IconPath);
+            Icon = bitmapImage;
+        }
+        catch (Exception ex)
+        {
+            // 忽略加载错误
+        }
     }
 
     internal static List<NotificationGroup> GroupBySender(List<NotificationTextMessage>? messages)
