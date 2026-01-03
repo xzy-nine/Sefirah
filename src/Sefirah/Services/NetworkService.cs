@@ -393,6 +393,11 @@ public class NetworkService(
                 messageType = "DATA_ICON_REQUEST";
                 logger.LogDebug("识别到 ICON_REQUEST 消息类型");
             }
+            else if (message.Contains("AUDIO_RESPONSE", StringComparison.OrdinalIgnoreCase))
+            {
+                messageType = "DATA_AUDIO_RESPONSE";
+                logger.LogDebug("识别到 AUDIO_RESPONSE 消息类型");
+            }
             else
             {
                 logger.LogDebug("使用默认 DATA_JSON 消息类型");
@@ -730,6 +735,9 @@ public class NetworkService(
                     case "DATA_JSON":
                         await DispatchPayloadAsync(device, decryptedPayload);
                         break;
+                    case "DATA_AUDIO_REQUEST":
+                        await DispatchPayloadAsync(device, decryptedPayload);
+                        break;
                     default:
                         logger.LogWarning("不支持的 DATA 消息类型: {messageType}", messageType);
                         break;
@@ -912,7 +920,7 @@ public class NetworkService(
                     logger.LogDebug("识别到Notify-Relay-pc消息类型：{messageType}");
                     
                     // 如果是Notify-Relay-pc特定消息类型，直接处理
-                    if (messageType is "APP_LIST_RESPONSE" or "ICON_RESPONSE")
+                    if (messageType is "APP_LIST_RESPONSE" or "ICON_RESPONSE" or "AUDIO_REQUEST")
                     {
                         // 使用反射获取HandleJsonMessageAsync方法并调用
                         var handleJsonMethod = messageHandler.Value.GetType().GetMethod("HandleJsonMessageAsync", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);

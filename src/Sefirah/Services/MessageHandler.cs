@@ -17,6 +17,7 @@ public class MessageHandler(
     IPlaybackService playbackService,
     IActionService actionService,
     ISftpService sftpService,
+    IScreenMirrorService screenMirrorService,
     ILogger<MessageHandler> logger) : IMessageHandler
 {
     public async Task HandleMessageAsync(PairedDevice device, SocketMessage message)
@@ -124,6 +125,10 @@ public class MessageHandler(
                 case "ICON_RESPONSE":
                     logger.LogDebug("处理 ICON_RESPONSE 消息");
                     await HandleIconResponseAsync(device, root);
+                    break;
+                case "AUDIO_REQUEST":
+                    logger.LogDebug("处理 AUDIO_REQUEST 消息");
+                    await HandleAudioRequestAsync(device, root);
                     break;
                 default:
                     logger.LogWarning("不支持的 JSON 消息类型：{messageType}", messageType);
@@ -305,6 +310,43 @@ public class MessageHandler(
         catch (Exception ex)
         {
             logger.LogError(ex, "处理 ICON_RESPONSE 时出错");
+        }
+    }
+    
+    /// <summary>
+    /// 处理音频转发请求
+    /// </summary>
+    /// <param name="device">设备</param>
+    /// <param name="root">JSON 根元素</param>
+    private async Task HandleAudioRequestAsync(PairedDevice device, JsonElement root)
+    {
+        try
+        {
+            logger.LogInformation("收到音频转发请求，设备：{deviceName}", device.Name);
+            
+            // 构建仅音频转发的 scrcpy 参数
+            string customArgs = "--no-video --no-control";
+            
+            // 启动 scrcpy 仅音频转发
+            bool success = await screenMirrorService.StartScrcpy(device, customArgs);
+            
+            // 发送响应
+            string response = success
+                ? "{\"type\":\"AUDIO_RESPONSE\",\"result\":\"accepted\"}"
+                : "{\"type\":\"AUDIO_RESPONSE\",\"result\":\"rejected\"}";
+            
+            // 通过 networkService 发送响应
+            networkService.SendMessage(device.Id, response);
+            
+            logger.LogInformation("音频转发请求处理完成，结果：{result}", success ? "accepted" : "rejected");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "处理音频转发请求时出错");
+            
+            // 发送拒绝响应
+            string errorResponse = "{\"type\":\"AUDIO_RESPONSE\",\"result\":\"rejected\"}";
+            networkService.SendMessage(device.Id, errorResponse);
         }
     }
 }
