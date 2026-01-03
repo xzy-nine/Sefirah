@@ -9,6 +9,8 @@ namespace Sefirah.Utils;
 public static class IconUtils
 {
     private const string AppIconsFolderName = "AppIcons";
+    private const string NotifyRelayPackageName = "com.xzyht.notifyrelay";
+    private const string NotifyRelayAppIconPath = "ms-appx:///Assets/NotifyRelayAppIcon.png";
 
     /// <summary>
     /// Gets or creates the AppIcons folder in the local app data
@@ -55,6 +57,12 @@ public static class IconUtils
     /// <returns>URI to the app icon file</returns>
     public static async Task<Uri?> GetAppIconUriAsync(string packageName)
     {
+        // 对于 Notify-Relay 应用包名，返回内置图标 URI
+        if (packageName == NotifyRelayPackageName)
+        {
+            return new Uri(NotifyRelayAppIconPath);
+        }
+        
         try
         {
             var appIconsFolder = await GetAppIconsFolderAsync();
@@ -69,11 +77,23 @@ public static class IconUtils
 
     public static string GetAppIconFilePath(string packageName)
     {
-        return $"{ApplicationData.Current.LocalFolder.Path}\\{AppIconsFolderName}\\{packageName}.png";
+        // 对于 Notify-Relay 应用包名，返回内置图标路径
+        if (packageName == NotifyRelayPackageName)
+        {
+            return NotifyRelayAppIconPath;
+        }
+        
+        return $@"{ApplicationData.Current.LocalFolder.Path}\{AppIconsFolderName}\{packageName}.png";
     }
 
     public static string GetAppIconPath(string packageName)
     {
+        // 对于 Notify-Relay 应用包名，返回内置图标路径
+        if (packageName == NotifyRelayPackageName)
+        {
+            return NotifyRelayAppIconPath;
+        }
+        
         return $"ms-appdata:///local/{AppIconsFolderName}/{packageName}.png";
     }
 
@@ -84,6 +104,12 @@ public static class IconUtils
     /// <returns>True if the icon file exists, false otherwise</returns>
     public static bool AppIconExists(string packageName)
     {
+        // 对于 Notify-Relay 应用包名，始终返回 true，使用内置图标
+        if (packageName == NotifyRelayPackageName)
+        {
+            return true;
+        }
+        
         try
         {
             string iconFilePath = GetAppIconFilePath(packageName);
@@ -103,6 +129,12 @@ public static class IconUtils
     /// <param name="appPackage">App package name</param>
     public static async Task SaveAppIconToPathAsync(string? appIconBase64, string appPackage)
     {
+        // 对于 Notify-Relay 应用包名，跳过保存，使用内置图标
+        if (appPackage == NotifyRelayPackageName)
+        {
+            return;
+        }
+        
         try
         {
             if (string.IsNullOrEmpty(appIconBase64)) return;

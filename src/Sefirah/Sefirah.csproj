@@ -1,4 +1,4 @@
-﻿<Project Sdk="Uno.Sdk">
+<Project Sdk="Uno.Sdk">
     <PropertyGroup>
         <TargetFrameworks>net9.0-windows10.0.26100;net9.0-desktop</TargetFrameworks>
 
@@ -89,6 +89,9 @@
 
     <ItemGroup>
         <Content Include="Assets\Icons\IconResource.dll">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </Content>
+        <Content Include="Assets\NotifyRelayAppIcon.png">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </Content>
     </ItemGroup>
