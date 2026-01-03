@@ -64,4 +64,9 @@ public interface IDeviceManager
     Task Initialize();
 
     List<string> GetRemoteDeviceIpAddresses();
+    
+    /// <summary>
+    /// Event fired when the local device name changes
+    /// </summary>
+    event EventHandler<string>? LocalDeviceNameChanged;
 }

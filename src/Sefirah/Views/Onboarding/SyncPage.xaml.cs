@@ -13,6 +13,11 @@ public sealed partial class SyncPage : Page
     {
         InitializeComponent();
         ViewModel = Ioc.Default.GetRequiredService<DevicesViewModel>();
+    }
+
+    protected override void OnNavigatedTo(NavigationEventArgs e)
+    {
+        base.OnNavigatedTo(e);
         DiscoveryService.StartDiscoveryAsync();
     }
 

@@ -24,6 +24,11 @@ public partial class DeviceManager(ILogger<DeviceManager> logger, DeviceReposito
     public event EventHandler<PairedDevice?>? ActiveDeviceChanged;
 
     /// <summary>
+    /// Event fired when the local device name changes
+    /// </summary>
+    public event EventHandler<string>? LocalDeviceNameChanged;
+
+    /// <summary>
     /// Finds a device session by device ID
     /// </summary>
     public PairedDevice? FindDeviceById(string deviceId)
@@ -290,7 +295,14 @@ public partial class DeviceManager(ILogger<DeviceManager> logger, DeviceReposito
     {
         try
         {
+            var existingDevice = repository.GetLocalDevice();
             repository.AddOrUpdateLocalDevice(device);
+            
+            // 检查设备名是否更改
+            if (existingDevice != null && existingDevice.DeviceName != device.DeviceName)
+            {
+                LocalDeviceNameChanged?.Invoke(this, device.DeviceName);
+            }
         }
         catch (Exception ex)
         {

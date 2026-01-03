@@ -79,6 +79,7 @@ public partial class MulticastClient(string address, int port, IUdpClientProvide
 
     protected override void OnDisconnected()
     {
+        socketProvider.OnDisconnected();
     }
 
     protected override void OnReceived(EndPoint endpoint, byte[] buffer, long offset, long size)
