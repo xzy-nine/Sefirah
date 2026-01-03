@@ -19,7 +19,7 @@ public class NotificationService(
     IPlatformNotificationHandler platformNotificationHandler,
     RemoteAppRepository remoteAppsRepository,
     NotificationRepository notificationRepository,
-    INetworkService networkService) : INotificationService
+    INetworkService networkService) : INotificationService, INotifyPropertyChanged
 {
     private readonly Dictionary<string, ObservableCollection<Notification>> deviceNotifications = [];
     private readonly Microsoft.UI.Dispatching.DispatcherQueue dispatcher = App.MainWindow.DispatcherQueue;
@@ -27,14 +27,41 @@ public class NotificationService(
     private readonly ObservableCollection<Notification> activeNotifications = [];
     private readonly HashSet<string> loadedDeviceIds = [];
     
+    // 音乐媒体块相关
+    private MusicMediaBlock? _currentMusicMediaBlock;
+    private System.Threading.Timer? _musicMediaBlockTimer;
+    private const int MUSIC_MEDIA_BLOCK_TIMEOUT = 30; // 30秒超时
+    
     // 跟踪图标请求状态的字典，key: packageName|deviceId, value: TaskCompletionSource<bool>
     private readonly Dictionary<string, TaskCompletionSource<bool>> pendingIconRequests = [];
     private const int ICON_REQUEST_TIMEOUT = 3000; // 图标请求最长等待时间：3秒
 
     /// <summary>
+    /// 属性变更事件
+    /// </summary>
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <summary>
     /// Gets all notifications from all devices
     /// </summary>
     public ReadOnlyObservableCollection<Notification> NotificationHistory => new(activeNotifications);
+    
+    /// <summary>
+    /// 当前显示的音乐媒体块
+    /// </summary>
+    public MusicMediaBlock? CurrentMusicMediaBlock
+    {
+        get => _currentMusicMediaBlock;
+        private set
+        {
+            dispatcher.EnqueueAsync(() =>
+            {
+                _currentMusicMediaBlock = value;
+                // 触发属性变更通知
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CurrentMusicMediaBlock)));
+            });
+        }
+    }
 
     // Initialize the service - call this after DI container creates the instance
     public void Initialize()
@@ -56,6 +83,13 @@ public class NotificationService(
         {
             _ = EnsureNotificationsLoadedAsync(deviceManager.ActiveDevice);
         }
+        
+        // 初始化音乐媒体块超时检查定时器，每1秒检查一次
+        _musicMediaBlockTimer = new System.Threading.Timer(
+            _ => CheckMusicMediaBlockTimeout(),
+            null,
+            TimeSpan.FromSeconds(1),
+            TimeSpan.FromSeconds(1));
     }
 
     /// <summary>
@@ -101,7 +135,9 @@ public class NotificationService(
                 if (filter == NotificationFilter.Disabled) return;
 
                 // 检查是否需要请求图标
-                bool needIconRequest = !string.IsNullOrEmpty(message.AppPackage) && !IconUtils.AppIconExists(message.AppPackage);
+                // 处理mediaplay:前缀，移除前缀后再检查图标
+                string actualPackageName = message.AppPackage?.StartsWith("mediaplay:") == true ? message.AppPackage.Substring("mediaplay:".Length) : message.AppPackage;
+                bool needIconRequest = !string.IsNullOrEmpty(actualPackageName) && !IconUtils.AppIconExists(actualPackageName);
                 TaskCompletionSource<bool>? iconRequestTcs = null;
                 string? requestKey = null;
                 
@@ -112,8 +148,8 @@ public class NotificationService(
                     iconRequestTcs = new TaskCompletionSource<bool>();
                     pendingIconRequests[requestKey] = iconRequestTcs;
                     
-                    // 发送图标请求
-                    networkService.SendIconRequest(device.Id, message.AppPackage);
+                    // 发送图标请求，使用实际包名
+                    networkService.SendIconRequest(device.Id, actualPackageName);
                 }
 
                 // 等待图标请求完成，最长等待 3 秒
@@ -531,10 +567,12 @@ public class NotificationService(
             {
                 if (notification.Icon == null && !string.IsNullOrEmpty(notification.AppPackage))
                 {
+                    // 处理mediaplay:前缀，移除前缀后再处理图标
+                    string actualPackageName = notification.AppPackage.StartsWith("mediaplay:") ? notification.AppPackage.Substring("mediaplay:".Length) : notification.AppPackage;
                     // 确保图标路径正确
-                    notification.IconPath = IconUtils.GetAppIconPath(notification.AppPackage);
+                    notification.IconPath = IconUtils.GetAppIconPath(actualPackageName);
                     // 检查图标文件是否存在，如果存在则尝试加载图标
-                    if (IconUtils.AppIconExists(notification.AppPackage))
+                    if (IconUtils.AppIconExists(actualPackageName))
                     {
                         // 异步加载图标，不阻塞主线程
                         _ = notification.LoadIconAsync();
@@ -599,29 +637,31 @@ public class NotificationService(
                     notif.AddSourceDevice(device.Id, device.Name);
                     
                     // 确保图标路径正确设置
-                    if (!string.IsNullOrEmpty(msg.AppPackage))
-                    {
-                        // 直接设置图标路径，确保所有设备的通知都能访问到正确的图标路径
-                        string iconPath = IconUtils.GetAppIconPath(msg.AppPackage);
-                        notif.IconPath = iconPath;
-                        
-                        // 确保图标文件存在
-                        if (IconUtils.AppIconExists(msg.AppPackage))
+                        if (!string.IsNullOrEmpty(msg.AppPackage))
                         {
-                            // 立即同步加载图标，确保历史通知能显示图标
-                            await notif.LoadIconAsync();
+                            // 处理mediaplay:前缀，移除前缀后再处理图标
+                            string actualPackageName = msg.AppPackage.StartsWith("mediaplay:") ? msg.AppPackage.Substring("mediaplay:".Length) : msg.AppPackage;
+                            // 直接设置图标路径，确保所有设备的通知都能访问到正确的图标路径
+                            string iconPath = IconUtils.GetAppIconPath(actualPackageName);
+                            notif.IconPath = iconPath;
+                            
+                            // 确保图标文件存在
+                            if (IconUtils.AppIconExists(actualPackageName))
+                            {
+                                // 立即同步加载图标，确保历史通知能显示图标
+                                await notif.LoadIconAsync();
+                            }
+                            else
+                            {
+                                // 如果图标不存在，尝试异步请求图标
+                                logger.LogDebug("通知图标不存在，尝试请求图标: {AppPackage}", actualPackageName);
+                                // 发送图标请求，使用实际包名
+                                networkService.SendIconRequest(device.Id, actualPackageName);
+                                // 延迟一段时间后再次尝试加载图标
+                                await Task.Delay(500);
+                                await notif.LoadIconAsync();
+                            }
                         }
-                        else
-                        {
-                            // 如果图标不存在，尝试异步请求图标
-                            logger.LogDebug("通知图标不存在，尝试请求图标: {AppPackage}", msg.AppPackage);
-                            // 发送图标请求
-                            networkService.SendIconRequest(device.Id, msg.AppPackage);
-                            // 延迟一段时间后再次尝试加载图标
-                            await Task.Delay(500);
-                            await notif.LoadIconAsync();
-                        }
-                    }
                     
                     notifications.Add(notif);
                 }
@@ -676,6 +716,107 @@ public class NotificationService(
     }
 #endif
 
+    /// <summary>
+    /// 处理媒体播放通知
+    /// </summary>
+    /// <param name="device">设备</param>
+    /// <param name="notificationMessage">通知消息</param>
+    public async Task HandleMediaPlayNotification(PairedDevice device, NotificationMessage notificationMessage)
+    {
+        try
+        {
+            // 检查设备是否启用了通知同步
+            if (!device.DeviceSettings.NotificationSyncEnabled) return;
+            
+            // 解析媒体播放通知的标题和文本
+            // 注意：对于差异包，我们需要保留现有值，而不是将缺失的字段置空
+            string title = notificationMessage.Title ?? "";
+            string text = notificationMessage.Text ?? "";
+            
+            // 从通知消息中提取封面URL
+            string? coverUrl = null;
+            if (!string.IsNullOrEmpty(notificationMessage.CoverUrl))
+            {
+                coverUrl = notificationMessage.CoverUrl;
+            }
+            else if (!string.IsNullOrEmpty(notificationMessage.BigPicture))
+            {
+                coverUrl = notificationMessage.BigPicture;
+            }
+            else if (!string.IsNullOrEmpty(notificationMessage.LargeIcon))
+            {
+                coverUrl = notificationMessage.LargeIcon;
+            }
+            
+            // 更新或创建音乐媒体块
+            if (CurrentMusicMediaBlock == null || CurrentMusicMediaBlock.DeviceId != device.Id)
+            {
+                // 创建新的音乐媒体块
+                CurrentMusicMediaBlock = new MusicMediaBlock(
+                    device.Id,
+                    device.Name,
+                    title,
+                    text,
+                    coverUrl
+                );
+            }
+            else
+            {
+                // 处理差异包：只更新那些在通知消息中明确提供的字段，保留其他字段的当前值
+                string updatedTitle = CurrentMusicMediaBlock.Title;
+                string updatedText = CurrentMusicMediaBlock.Text;
+                string? updatedCoverUrl = CurrentMusicMediaBlock.CoverUrl;
+                
+                // 只有当通知消息中明确提供了title字段时，才更新标题
+                if (!string.IsNullOrEmpty(notificationMessage.Title))
+                {
+                    updatedTitle = notificationMessage.Title;
+                }
+                
+                // 只有当通知消息中明确提供了text字段时，才更新文本
+                if (!string.IsNullOrEmpty(notificationMessage.Text))
+                {
+                    updatedText = notificationMessage.Text;
+                }
+                
+                // 只有当收到的封面URL不为空时，才更新封面URL
+                if (!string.IsNullOrEmpty(coverUrl))
+                {
+                    updatedCoverUrl = coverUrl;
+                }
+                
+                // 在UI线程上更新音乐媒体块的属性
+                dispatcher.EnqueueAsync(() =>
+                {
+                    // 更新现有音乐媒体块
+                    CurrentMusicMediaBlock?.Update(updatedTitle, updatedText, updatedCoverUrl);
+                });
+            }
+            
+            logger.LogDebug("已更新音乐媒体块：{DeviceName} - {Title} - {Text}", device.Name, title, text);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "处理媒体播放通知时出错");
+        }
+    }
+    
+    /// <summary>
+    /// 检查音乐媒体块是否超时
+    /// </summary>
+    public void CheckMusicMediaBlockTimeout()
+    {
+        dispatcher.EnqueueAsync(() =>
+        {
+            if (CurrentMusicMediaBlock != null && CurrentMusicMediaBlock.IsTimeout(MUSIC_MEDIA_BLOCK_TIMEOUT))
+            {
+                // 超时，移除音乐媒体块
+                CurrentMusicMediaBlock = null;
+                logger.LogDebug("音乐媒体块超时，已移除");
+            }
+        });
+    }
+    
     /// <summary>
     /// 处理图标响应，通知等待的图标请求任务
     /// </summary>

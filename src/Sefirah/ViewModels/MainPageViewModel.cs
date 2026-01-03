@@ -12,7 +12,7 @@ public sealed partial class MainPageViewModel : BaseViewModel
     #region Services
     private IDeviceManager DeviceManager { get; } = Ioc.Default.GetRequiredService<IDeviceManager>();
     private IScreenMirrorService ScreenMirrorService { get; } = Ioc.Default.GetRequiredService<IScreenMirrorService>();
-    private INotificationService NotificationService { get; } = Ioc.Default.GetRequiredService<INotificationService>();
+    public INotificationService NotificationService { get; } = Ioc.Default.GetRequiredService<INotificationService>();
     private RemoteAppRepository RemoteAppsRepository { get; } = Ioc.Default.GetRequiredService<RemoteAppRepository>();
     private ISessionManager SessionManager { get; } = Ioc.Default.GetRequiredService<ISessionManager>();
     private IUpdateService UpdateService { get; } = Ioc.Default.GetRequiredService<IUpdateService>();
@@ -23,6 +23,11 @@ public sealed partial class MainPageViewModel : BaseViewModel
     public ObservableCollection<PairedDevice> PairedDevices => DeviceManager.PairedDevices;
     public ReadOnlyObservableCollection<Notification> Notifications => NotificationService.NotificationHistory;
     public PairedDevice? Device => DeviceManager.ActiveDevice;
+    
+    /// <summary>
+    /// 当前显示的音乐媒体块
+    /// </summary>
+    public MusicMediaBlock? CurrentMusicMediaBlock => NotificationService.CurrentMusicMediaBlock;
 
     [ObservableProperty]
     public partial bool LoadingScrcpy { get; set; } = false;
@@ -40,6 +45,18 @@ public sealed partial class MainPageViewModel : BaseViewModel
                 if (e.PropertyName == nameof(IDeviceManager.ActiveDevice))
                 {
                     OnPropertyChanged(nameof(Device));
+                }
+            };
+        }
+        
+        // 监听 NotificationService 的 PropertyChanged 事件，当 CurrentMusicMediaBlock 变化时触发 UI 更新
+        if (NotificationService is INotifyPropertyChanged npc2)
+        {
+            npc2.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(INotificationService.CurrentMusicMediaBlock))
+                {
+                    OnPropertyChanged(nameof(CurrentMusicMediaBlock));
                 }
             };
         }

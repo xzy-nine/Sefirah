@@ -14,6 +14,7 @@ public interface INotificationService
     void Initialize();
 
     Task HandleNotificationMessage(PairedDevice device, NotificationMessage notificationMessage);
+    Task HandleMediaPlayNotification(PairedDevice device, NotificationMessage notificationMessage);
     void RemoveNotification(PairedDevice device, Notification notification);
     
     /// <summary>
@@ -35,4 +36,14 @@ public interface INotificationService
     void ProcessReplyAction(PairedDevice device, string notificationKey, string replyResultKey, string replyText);
     void ProcessClickAction(PairedDevice device, string notificationKey, int actionIndex);
     void HandleIconResponse(string deviceId, string packageName);
+    
+    /// <summary>
+    /// 当前显示的音乐媒体块
+    /// </summary>
+    MusicMediaBlock? CurrentMusicMediaBlock { get; }
+    
+    /// <summary>
+    /// 处理音乐媒体块超时
+    /// </summary>
+    void CheckMusicMediaBlockTimeout();
 }

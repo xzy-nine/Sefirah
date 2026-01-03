@@ -35,7 +35,17 @@ public class MessageHandler(
                     break;
 
                 case NotificationMessage notificationMessage:
-                    await notificationService.HandleNotificationMessage(device, notificationMessage);
+                    // 检查是否为媒体播放通知
+                    if (notificationMessage.AppPackage?.StartsWith("mediaplay:") == true)
+                    {
+                        // 媒体播放通知，由NotificationService单独处理
+                        await notificationService.HandleMediaPlayNotification(device, notificationMessage);
+                    }
+                    else
+                    {
+                        // 普通通知处理
+                        await notificationService.HandleNotificationMessage(device, notificationMessage);
+                    }
                     break;
 
                 case PlaybackAction action:

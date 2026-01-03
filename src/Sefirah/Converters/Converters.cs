@@ -1,5 +1,8 @@
 using System.Globalization;
+using System.IO;
+using Windows.Storage.Streams;
 using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Sefirah.Data.Models;
 using Sefirah.Extensions;
 
@@ -161,6 +164,55 @@ internal sealed partial class BooleanToVisibilityConverter : ValueConverter<bool
     protected override bool ConvertBack(Visibility value, object? parameter, string? language)
     {
         throw new NotSupportedException();
+    }
+}
+
+internal sealed partial class StringToImageSourceConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, string language)
+    {
+        if (value is string url && !string.IsNullOrEmpty(url))
+        {
+            try
+            {
+                // 直接尝试将URL转换为BitmapImage，不管它是什么格式
+                // 对于base64 data URL和ms-appdata URL都适用
+                var bitmapImage = new BitmapImage();
+                
+                if (url.StartsWith("data:image/"))
+                {
+                    // 处理base64 data URL
+                    var base64Data = url.Substring(url.IndexOf(",") + 1);
+                    var bytes = System.Convert.FromBase64String(base64Data);
+                    
+                    // 使用MemoryStream加载图片数据
+                    using (var stream = new MemoryStream(bytes))
+                    {
+                        stream.Seek(0, SeekOrigin.Begin);
+                        bitmapImage.SetSource(stream.AsRandomAccessStream());
+                    }
+                    
+                    return bitmapImage;
+                }
+                else
+                {
+                    // 处理普通URL
+                    bitmapImage.UriSource = new Uri(url);
+                    return bitmapImage;
+                }
+            }
+            catch (Exception ex)
+            {
+                // 记录错误，但不抛出异常
+                System.Diagnostics.Debug.WriteLine($"StringToImageSourceConverter: {ex.Message}");
+            }
+        }
+        return null;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, string language)
+    {
+        throw new NotImplementedException();
     }
 }
 

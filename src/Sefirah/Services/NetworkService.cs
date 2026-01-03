@@ -241,14 +241,19 @@ public class NetworkService(
                 const int notifyRelayPort = 23333; // 使用与本机相同的端口
                 logger.LogDebug("使用设备IP地址：{ipAddress}:{port}", ipAddress, notifyRelayPort);
 
+                // 处理mediaplay:前缀，移除前缀后再发送请求
+                var processedPackageNames = packageNames.Select(packageName => 
+                    packageName.StartsWith("mediaplay:") ? packageName.Substring("mediaplay:".Length) : packageName
+                ).ToList();
+                
                 // 构建图标请求对象（支持单个或多个包名）
                 object requestObj;
-                if (packageNames.Count == 1)
+                if (processedPackageNames.Count == 1)
                 {
                     requestObj = new
                     {
                         type = "ICON_REQUEST",
-                        packageName = packageNames.First(),
+                        packageName = processedPackageNames.First(),
                         time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
                     };
                 }
@@ -257,7 +262,7 @@ public class NetworkService(
                     requestObj = new
                     {
                         type = "ICON_REQUEST",
-                        packageNames = packageNames,
+                        packageNames = processedPackageNames,
                         time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
                     };
                 }
@@ -1008,7 +1013,8 @@ public class NetworkService(
                 Title = root.TryGetProperty("title", out var titleProp) ? titleProp.GetString() : null,
                 Text = root.TryGetProperty("text", out var textProp) ? textProp.GetString() : null,
                 AppIcon = root.TryGetProperty("appIcon", out var appIconProp) ? appIconProp.GetString() : null,
-                LargeIcon = root.TryGetProperty("largeIcon", out var largeIconProp) ? largeIconProp.GetString() : null
+                LargeIcon = root.TryGetProperty("largeIcon", out var largeIconProp) ? largeIconProp.GetString() : null,
+                CoverUrl = root.TryGetProperty("coverUrl", out var coverUrlProp) ? coverUrlProp.GetString() : null
             };
 
             return true;

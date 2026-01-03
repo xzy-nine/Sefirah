@@ -105,6 +105,9 @@ public class NotificationMessage : SocketMessage
 
     [JsonPropertyName("largeIcon")]
     public string? LargeIcon { get; set; }
+    
+    [JsonPropertyName("coverUrl")]
+    public string? CoverUrl { get; set; }
 }
 
 public class ReplyAction : SocketMessage
