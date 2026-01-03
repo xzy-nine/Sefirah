@@ -729,19 +729,16 @@ public class NetworkService(
                         await HandleAppListRequestAsync(device, decryptedPayload);
                         break;
                     case "DATA_APP_LIST_RESPONSE":
+                    case "DATA_ICON_RESPONSE":
+                    case "DATA_JSON":
+                    case "DATA_SUPERISLAND":
+                    case "DATA_MEDIAPLAY":
+                    case "DATA_NOTIFICATION":
+                    case "DATA_AUDIO_REQUEST":
                         await DispatchPayloadAsync(device, decryptedPayload);
                         break;
                     case "DATA_ICON_REQUEST":
                         await HandleIconRequestAsync(device, decryptedPayload);
-                        break;
-                    case "DATA_ICON_RESPONSE":
-                        await DispatchPayloadAsync(device, decryptedPayload);
-                        break;
-                    case "DATA_JSON":
-                        await DispatchPayloadAsync(device, decryptedPayload);
-                        break;
-                    case "DATA_AUDIO_REQUEST":
-                        await DispatchPayloadAsync(device, decryptedPayload);
                         break;
                     default:
                         logger.LogWarning("不支持的 DATA 消息类型: {messageType}", messageType);
