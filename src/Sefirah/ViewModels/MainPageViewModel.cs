@@ -122,7 +122,10 @@ public sealed partial class MainPageViewModel : BaseViewModel
     [RelayCommand]
     public void ClearAllNotifications()
     {
-        NotificationService.ClearAllNotification();
+        if (Device != null)
+        {
+            NotificationService.ClearAllNotification(Device);
+        }
     }
 
     [RelayCommand]
@@ -177,7 +180,10 @@ public sealed partial class MainPageViewModel : BaseViewModel
 
     public void ToggleNotificationPin(Notification notification)
     {
-        NotificationService.TogglePinNotification(notification);
+        if (Device != null)
+        {
+            NotificationService.TogglePinNotification(Device, notification);
+        }
     }
 
     public void SendFiles(IReadOnlyList<IStorageItem> storageItems)

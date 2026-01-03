@@ -254,40 +254,43 @@ public class NotificationService(
         }
     }
 
-    public void TogglePinNotification(Notification notification)
+    public void TogglePinNotification(PairedDevice device, Notification notification)
     {
-        var activeDevice = deviceManager.ActiveDevice!;
-
         dispatcher.EnqueueAsync(() =>
         {
-            if (!deviceNotifications.TryGetValue(activeDevice.Id, out var notifications)) return;
+            if (!deviceNotifications.TryGetValue(device.Id, out var notifications)) return;
             
             notification.Pinned = !notification.Pinned;
             // Update existing notification
             var index = notifications.IndexOf(notification);
             notifications[index] = notification;
-            SortNotifications(activeDevice.Id);
-            notificationRepository.UpdatePinned(activeDevice.Id, notification.Key, notification.Pinned);
+            SortNotifications(device.Id);
+            notificationRepository.UpdatePinned(device.Id, notification.Key, notification.Pinned);
                 
-            // Update active notifications since this is for the active device
-            UpdateActiveNotifications(activeDevice);
+            // Update active notifications if this is for the active device
+            if (deviceManager.ActiveDevice?.Id == device.Id)
+            {
+                UpdateActiveNotifications(device);
+            }
         });
     }
 
-    public void ClearAllNotification()
+    public void ClearAllNotification(PairedDevice device)
     {
-        var activeDevice = deviceManager.ActiveDevice!;
         try
         {
-            ClearHistory(activeDevice);
-            activeNotifications.Clear();
-            notificationRepository.ClearDeviceNotifications(activeDevice.Id);
-            if (!activeDevice.ConnectionStatus) return;
+            ClearHistory(device);
+            if (deviceManager.ActiveDevice?.Id == device.Id)
+            {
+                activeNotifications.Clear();
+            }
+            notificationRepository.ClearDeviceNotifications(device.Id);
+            if (!device.ConnectionStatus) return;
 
             var command = new CommandMessage { CommandType = CommandType.ClearNotifications };
             string jsonMessage = SocketMessageSerializer.Serialize(command);
-            sessionManager.SendMessage(activeDevice.Id, jsonMessage);
-            logger.LogInformation("已清除设备 {DeviceId} 的全部通知", activeDevice.Id);
+            sessionManager.SendMessage(device.Id, jsonMessage);
+            logger.LogInformation("已清除设备 {DeviceId} 的全部通知", device.Id);
         }
         catch (Exception ex)
         {

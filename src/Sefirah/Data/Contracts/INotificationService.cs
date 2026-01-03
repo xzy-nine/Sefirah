@@ -19,12 +19,12 @@ public interface INotificationService
     /// <summary>
     /// Toggles pin status for a notification in the active session
     /// </summary>
-    void TogglePinNotification(Notification notification);
+    void TogglePinNotification(PairedDevice device, Notification notification);
     
     /// <summary>
-    /// Clears all notifications for the active session
+    /// Clears all notifications for the specified device
     /// </summary>
-    void ClearAllNotification();
+    void ClearAllNotification(PairedDevice device);
     
     void ClearHistory(PairedDevice device);
     void ProcessReplyAction(PairedDevice device, string notificationKey, string replyResultKey, string replyText);
