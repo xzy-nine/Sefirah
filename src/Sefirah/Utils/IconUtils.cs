@@ -69,8 +69,19 @@ public static class IconUtils
         try
         {
             var appIconsFolder = await GetAppIconsFolderAsync();
-            await appIconsFolder.GetFileAsync(actualPackageName);
-            return new Uri($"ms-appdata:///local/{AppIconsFolderName}/{actualPackageName}");
+            // First try with .png extension (most icons are saved as {package}.png)
+            string fileNameWithExt = actualPackageName.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ? actualPackageName : actualPackageName + ".png";
+            try
+            {
+                await appIconsFolder.GetFileAsync(fileNameWithExt);
+                return new Uri($"ms-appdata:///local/{AppIconsFolderName}/{fileNameWithExt}");
+            }
+            catch (FileNotFoundException)
+            {
+                // Fallback: try without extension (legacy)
+                await appIconsFolder.GetFileAsync(actualPackageName);
+                return new Uri($"ms-appdata:///local/{AppIconsFolderName}/{actualPackageName}");
+            }
         }
         catch (FileNotFoundException)
         {

@@ -7,7 +7,10 @@ using Sefirah.Services;
 using Sefirah.Utils;
 using Uno.Logging;
 using Windows.System;
+using Windows.Storage;
+using Windows.Storage.Streams;
 using static Sefirah.Constants;
+using System.IO;
 
 namespace Sefirah.Platforms.Windows.Services;
 
@@ -16,6 +19,51 @@ namespace Sefirah.Platforms.Windows.Services;
 /// </summary>
 public class WindowsNotificationHandler(ILogger logger, ISessionManager sessionManager, IDeviceManager deviceManager) : IPlatformNotificationHandler
 {
+    private static readonly TimeSpan TempIconMaxAge = TimeSpan.FromDays(1); // 清理 1 天以前的临时图标
+    private const string TempIconsFolderName = "Sefirah-pc-icons";
+
+    private static string GetTempIconsDirectory()
+    {
+        string tempPath = Path.GetTempPath();
+        string tempIconsDirectory = Path.Combine(tempPath, TempIconsFolderName);
+        try
+        {
+            Directory.CreateDirectory(tempIconsDirectory);
+
+            // 清理超过阈值的旧文件
+            try
+            {
+                var files = Directory.GetFiles(tempIconsDirectory);
+                var expireBefore = DateTime.UtcNow - TempIconMaxAge;
+                foreach (var f in files)
+                {
+                    try
+                    {
+                        var info = new FileInfo(f);
+                        if (info.Exists && info.LastWriteTimeUtc < expireBefore)
+                        {
+                            info.Delete();
+                        }
+                    }
+                    catch
+                    {
+                        // 忽略单个文件删除错误
+                    }
+                }
+            }
+            catch
+            {
+                // 忽略清理错误
+            }
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return tempIconsDirectory;
+    }
+
     /// <inheritdoc />
     public async Task ShowRemoteNotification(NotificationMessage message, string deviceId)
     {
@@ -28,18 +76,118 @@ public class WindowsNotificationHandler(ILogger logger, ISessionManager sessionM
                 .SetTag(message.Tag ?? string.Empty)
                 .SetGroup(message.GroupKey ?? string.Empty);
 
-            if (!string.IsNullOrEmpty(message.LargeIcon))
-            {
-                var fileUri = await IconUtils.SaveBase64ToFileAsync(message.LargeIcon, "largeIcon.png");
-                builder.SetAppLogoOverride(fileUri, AppNotificationImageCrop.Circle);
-            }
-            else if (!string.IsNullOrEmpty(message.AppPackage))
+            // 优先使用通知的包名对应的图标（已有的 AppIcons 文件或内置图标）
+            if (!string.IsNullOrEmpty(message.AppPackage))
             {
                 var iconUri = await IconUtils.GetAppIconUriAsync(message.AppPackage);
+                var appIconExists = IconUtils.AppIconExists(message.AppPackage);
+                logger.LogDebug("通知 {NotificationKey}: 包名={AppPackage}, GetAppIconUriAsync 返回 {IconUri}, AppIconExists={Exists}",
+                    message.NotificationKey, message.AppPackage, iconUri?.ToString() ?? "<null>", appIconExists);
+
                 if (iconUri is not null)
                 {
-                    builder.SetAppLogoOverride(iconUri, AppNotificationImageCrop.Circle);
+                    // 如果图标是本地 ms-appdata 文件，尝试复制到系统临时目录并使用 file:// URI
+                    try
+                    {
+                        if (iconUri.Scheme.Equals("ms-appdata", StringComparison.OrdinalIgnoreCase) || iconUri.Scheme.Equals("file", StringComparison.OrdinalIgnoreCase))
+                        {
+                            try
+                            {
+                                var storageFile = await StorageFile.GetFileFromApplicationUriAsync(iconUri);
+                                
+                                // 创建临时图标目录并清理旧文件
+                                string tempIconsDirectory = GetTempIconsDirectory();
+
+                                // 构建临时文件路径
+                                string tempFileName = $"{message.AppPackage}_{DateTime.UtcNow.Ticks}.png";
+                                string tempFilePath = Path.Combine(tempIconsDirectory, tempFileName);
+
+                                // 复制图标文件到临时目录
+                                var destFolder = await StorageFolder.GetFolderFromPathAsync(tempIconsDirectory);
+                                await storageFile.CopyAsync(destFolder, tempFileName, NameCollisionOption.ReplaceExisting);
+
+                                // 使用 file:// URI 引用临时图标文件
+                                var fileUri = new Uri($"file://{tempFilePath}");
+                                logger.LogDebug("复制本地图标到临时目录并设置：通知键={NotificationKey}，临时路径={TempFilePath}", message.NotificationKey, tempFilePath);
+                                builder.SetAppLogoOverride(fileUri, AppNotificationImageCrop.Circle);
+                            }
+                            catch (Exception exLocal)
+                            {
+                                logger.LogWarning(exLocal, "无法读取本地图标 URI，回退使用原始 URI：{IconUri}", iconUri);
+                                builder.SetAppLogoOverride(iconUri, AppNotificationImageCrop.Circle);
+                            }
+                        }
+                        else
+                        {
+                            logger.LogDebug("设置通知图标为 {IconUri}，通知键：{NotificationKey}", iconUri, message.NotificationKey);
+                            builder.SetAppLogoOverride(iconUri, AppNotificationImageCrop.Circle);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "设置通知图标时出错，通知键：{NotificationKey}", message.NotificationKey);
+                    }
                 }
+                else if (!string.IsNullOrEmpty(message.LargeIcon))
+                {
+                    // 包名图标不存在时回退：保存消息内的 base64 大图到临时目录并使用它
+                    try
+                    {
+                        // 创建临时图标目录并清理旧文件
+                        string tempIconsDirectory = GetTempIconsDirectory();
+
+                        // 构建临时文件路径
+                        string tempFileName = $"largeIcon_{message.NotificationKey}_{DateTime.UtcNow.Ticks}.png";
+                        string tempFilePath = Path.Combine(tempIconsDirectory, tempFileName);
+
+                        // 直接将base64转换为字节数组并保存到临时文件
+                        var bytes = Convert.FromBase64String(message.LargeIcon);
+                        await File.WriteAllBytesAsync(tempFilePath, bytes);
+
+                        // 使用 file:// URI 引用临时图标文件
+                        var fileUri = new Uri($"file://{tempFilePath}");
+                        logger.LogDebug("包名图标不存在，已保存大图标到临时目录：{FileUri}，通知键：{NotificationKey}", fileUri, message.NotificationKey);
+                        builder.SetAppLogoOverride(fileUri, AppNotificationImageCrop.Circle);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "保存大图标到临时目录时出错，通知键：{NotificationKey}", message.NotificationKey);
+                    }
+                }
+                else
+                {
+                    logger.LogDebug("未找到应用图标或大图标，通知键：{NotificationKey}，包名：{AppPackage}", message.NotificationKey, message.AppPackage);
+                }
+            }
+            else if (!string.IsNullOrEmpty(message.LargeIcon))
+            {
+                // 当没有包名时，使用消息内的大图（base64）作为回退，保存到临时目录
+                try
+                {
+                    // 创建临时图标目录并清理旧文件
+                    string tempIconsDirectory = GetTempIconsDirectory();
+
+                    // 构建临时文件路径
+                    string tempFileName = $"largeIcon_{message.NotificationKey}_{DateTime.UtcNow.Ticks}.png";
+                    string tempFilePath = Path.Combine(tempIconsDirectory, tempFileName);
+
+                    // 直接将base64转换为字节数组并保存到临时文件
+                    var bytes = Convert.FromBase64String(message.LargeIcon);
+                    await File.WriteAllBytesAsync(tempFilePath, bytes);
+
+                    // 使用 file:// URI 引用临时图标文件
+                    var fileUri = new Uri($"file://{tempFilePath}");
+                    logger.LogDebug("未设置包名，已保存大图标到临时目录：{FileUri}，通知键：{NotificationKey}", fileUri, message.NotificationKey);
+                    builder.SetAppLogoOverride(fileUri, AppNotificationImageCrop.Circle);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "保存大图标到临时目录时出错，通知键：{NotificationKey}", message.NotificationKey);
+                }
+            }
+            else
+            {
+                logger.LogDebug("未设置图标：通知 {NotificationKey}，包名={AppPackage}，LargeIcon 为空", message.NotificationKey, message.AppPackage);
             }
 
             // Handle actions

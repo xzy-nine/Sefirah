@@ -74,6 +74,18 @@ public class NotificationRepository(DatabaseContext context, ILogger logger)
         }
     }
 
+    public void ClearDeviceNotificationsExceptPinned(string deviceId)
+    {
+        try
+        {
+            context.Database.Execute("DELETE FROM NotificationEntity WHERE DeviceId = ? AND Pinned = 0", deviceId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "清空设备 {DeviceId} 的未置顶通知失败", deviceId);
+        }
+    }
+
     public void UpdatePinned(string deviceId, string notificationKey, bool pinned)
     {
         try

@@ -70,20 +70,43 @@ public class NotificationService(
         // Listen to device connection status changes
         sessionManager.ConnectionStatusChanged += OnConnectionStatusChanged;
         
+        // When active device changes, ensure that device's notifications are loaded
         ((INotifyPropertyChanged)deviceManager).PropertyChanged += (s, e) =>
         {
             if (e.PropertyName is nameof(IDeviceManager.ActiveDevice) && deviceManager.ActiveDevice is not null)
             {
-                // 只确保设备通知已加载，但不更新活跃通知列表，因为活跃通知列表显示的是所有设备的通知
                 _ = EnsureNotificationsLoadedAsync(deviceManager.ActiveDevice);
             }
         };
 
-        if (deviceManager.ActiveDevice is not null)
+        // Ensure notifications are loaded for all currently paired devices at startup
+        try
         {
-            _ = EnsureNotificationsLoadedAsync(deviceManager.ActiveDevice);
+            foreach (var d in deviceManager.PairedDevices)
+            {
+                _ = EnsureNotificationsLoadedAsync(d);
+            }
+
+            // Subscribe to collection changes so newly paired devices get their notifications loaded automatically
+            deviceManager.PairedDevices.CollectionChanged += (s, e) =>
+            {
+                if (e.NewItems is not null)
+                {
+                    foreach (var item in e.NewItems)
+                    {
+                        if (item is PairedDevice newDevice)
+                        {
+                            _ = EnsureNotificationsLoadedAsync(newDevice);
+                        }
+                    }
+                }
+            };
         }
-        
+        catch
+        {
+            // ignore any issue enumerating paired devices during startup
+        }
+
         // 初始化音乐媒体块超时检查定时器，每1秒检查一次
         _musicMediaBlockTimer = new System.Threading.Timer(
             _ => CheckMusicMediaBlockTimeout(),
@@ -281,7 +304,7 @@ public class NotificationService(
                                 SortNotifications(device.Id);
                                 
                                 // Update all notifications
-                                UpdateActiveNotifications(deviceManager.ActiveDevice);
+                                UpdateActiveNotifications();
                                 
                                 #if WINDOWS
                                 // Check if the app is active before showing the notification
@@ -306,7 +329,7 @@ public class NotificationService(
                     await dispatcher.EnqueueAsync(() => notifications.Remove(notification));
                     notificationRepository.DeleteNotification(device.Id, message.NotificationKey);
                     // Update all notifications
-                    UpdateActiveNotifications(deviceManager.ActiveDevice);
+                    UpdateActiveNotifications();
                 }
             }
         }
@@ -331,22 +354,10 @@ public class NotificationService(
 
                 platformNotificationHandler.RemoveNotificationsByTagAndGroup(notification.Tag, notification.GroupKey);
 
-                // Update active notifications if this is for the active device
-                if (deviceManager.ActiveDevice?.Id == device.Id)
-                {   
-                    UpdateActiveNotifications(deviceManager.ActiveDevice);
-                }
+                // Always update the aggregated notifications after a removal
+                UpdateActiveNotifications();
 
-                var notificationToRemove = new NotificationMessage
-                {
-                    NotificationKey = notification.Key,
-                    NotificationType = NotificationType.Removed
-                };
-                string jsonMessage = SocketMessageSerializer.Serialize(notificationToRemove);
-                if (device.ConnectionStatus)
-                {
-                    sessionManager.SendMessage(device.Id, jsonMessage);
-                }
+                // 不再向设备发送单条通知删除消息；本地已删除并持久化
             }
         }
         catch (Exception ex)
@@ -362,17 +373,26 @@ public class NotificationService(
             if (!deviceNotifications.TryGetValue(device.Id, out var notifications)) return;
             
             notification.Pinned = !notification.Pinned;
-            // Update existing notification
+            // Update existing notification: try to find by reference first, then by Key
             var index = notifications.IndexOf(notification);
-            notifications[index] = notification;
+            if (index < 0)
+            {
+                index = notifications.ToList().FindIndex(n => n.Key == notification.Key);
+            }
+            if (index >= 0)
+            {
+                notifications[index] = notification;
+            }
+            else
+            {
+                // If not found, insert at the front
+                notifications.Insert(0, notification);
+            }
             SortNotifications(device.Id);
             notificationRepository.UpdatePinned(device.Id, notification.Key, notification.Pinned);
                 
-            // Update active notifications if this is for the active device
-            if (deviceManager.ActiveDevice?.Id == device.Id)
-            {
-                UpdateActiveNotifications(device);
-            }
+            // Always update the aggregated notifications after pin/unpin
+            UpdateActiveNotifications();
         });
     }
 
@@ -381,17 +401,12 @@ public class NotificationService(
         try
         {
             ClearHistory(device);
-            if (deviceManager.ActiveDevice?.Id == device.Id)
-            {
-                activeNotifications.Clear();
-            }
-            notificationRepository.ClearDeviceNotifications(device.Id);
+            // Only clear non-pinned notifications from the DB for this device
+            notificationRepository.ClearDeviceNotificationsExceptPinned(device.Id);
+            // Ensure UI reflects the cleared device notifications (pinned remain)
+            UpdateActiveNotifications();
+            // 不再向设备发送清除命令；本地仅清除未置顶通知
             if (!device.ConnectionStatus) return;
-
-            var command = new CommandMessage { CommandType = CommandType.ClearNotifications };
-            string jsonMessage = SocketMessageSerializer.Serialize(command);
-            sessionManager.SendMessage(device.Id, jsonMessage);
-            logger.LogInformation("已清除设备 {DeviceId} 的全部通知", device.Id);
         }
         catch (Exception ex)
         {
@@ -411,25 +426,29 @@ public class NotificationService(
                 // 清除所有设备的通知集合
                 foreach (var (deviceId, notifications) in deviceNotifications)
                 {
-                    notifications.Clear();
+                    // 移除集合中所有未置顶的通知，保留置顶
+                    for (int i = notifications.Count - 1; i >= 0; i--)
+                    {
+                        if (!notifications[i].Pinned)
+                        {
+                            notifications.RemoveAt(i);
+                        }
+                    }
+                }
+
+                // 从聚合活跃列表中移除所有未置顶通知
+                for (int i = activeNotifications.Count - 1; i >= 0; i--)
+                {
+                    if (!activeNotifications[i].Pinned)
+                    {
+                        activeNotifications.RemoveAt(i);
+                    }
                 }
                 
-                // 清除活跃通知集合
-                activeNotifications.Clear();
-                
-                // 清除所有设备的通知历史
+                // 清除所有设备的未置顶通知历史（保留置顶）
                 foreach (var device in deviceManager.PairedDevices)
                 {
-                    notificationRepository.ClearDeviceNotifications(device.Id);
-                    
-                    // 发送清除通知命令到设备
-                    if (device.ConnectionStatus)
-                    {
-                        var command = new CommandMessage { CommandType = CommandType.ClearNotifications };
-                        string jsonMessage = SocketMessageSerializer.Serialize(command);
-                        sessionManager.SendMessage(device.Id, jsonMessage);
-                        logger.LogInformation("已清除设备 {DeviceId} 的全部通知", device.Id);
-                    }
+                    notificationRepository.ClearDeviceNotificationsExceptPinned(device.Id);
                 }
                 
                 ClearBadge();
@@ -449,10 +468,18 @@ public class NotificationService(
             {
                 if (deviceNotifications.TryGetValue(device.Id, out var notifications))
                 {
-                    notifications.Clear();
+                    // 移除未置顶的通知，保留置顶
+                    for (int i = notifications.Count - 1; i >= 0; i--)
+                    {
+                        if (!notifications[i].Pinned)
+                        {
+                            notifications.RemoveAt(i);
+                        }
+                    }
                     ClearBadge();
                 }
-                notificationRepository.ClearDeviceNotifications(device.Id);
+                // 只清除数据库中未置顶的通知
+                notificationRepository.ClearDeviceNotificationsExceptPinned(device.Id);
             }
             catch (Exception ex)
             {
@@ -671,7 +698,7 @@ public class NotificationService(
             loadedDeviceIds.Add(device.Id);
 
             // Update all notifications, not just for the active device
-            UpdateActiveNotifications(deviceManager.ActiveDevice);
+            UpdateActiveNotifications();
         }
         catch (Exception ex)
         {
@@ -854,7 +881,7 @@ public class NotificationService(
                 }
                 
                 // 刷新所有通知
-                UpdateActiveNotifications(deviceManager.ActiveDevice);
+                UpdateActiveNotifications();
             });
         }
         catch (Exception ex)
