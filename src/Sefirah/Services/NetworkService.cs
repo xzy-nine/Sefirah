@@ -731,11 +731,13 @@ public class NetworkService(
                     case "DATA_APP_LIST_RESPONSE":
                     case "DATA_ICON_RESPONSE":
                     case "DATA_JSON":
-                    case "DATA_SUPERISLAND":
                     case "DATA_MEDIAPLAY":
                     case "DATA_NOTIFICATION":
                     case "DATA_AUDIO_REQUEST":
                         await DispatchPayloadAsync(device, decryptedPayload);
+                        break;
+                    case "DATA_SUPERISLAND":
+                        logger.LogDebug("收到超级岛消息，已过滤，不向后传递");
                         break;
                     case "DATA_ICON_REQUEST":
                         await HandleIconRequestAsync(device, decryptedPayload);
