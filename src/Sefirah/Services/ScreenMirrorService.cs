@@ -28,11 +28,11 @@ public class ScreenMirrorService(
     
     public async Task<bool> StartScrcpy(PairedDevice device, string? customArgs = null, string? iconPath = null)
     {
-        logger.LogInformation("[调试] StartScrcpy 请求: deviceId={DeviceId} customArgs={CustomArgs} iconPath={IconPath}", device?.Id, customArgs, iconPath);
+        logger.LogDebug("[调试] StartScrcpy 请求: deviceId={DeviceId} customArgs={CustomArgs} iconPath={IconPath}", device?.Id, customArgs, iconPath);
         try
         {
             // 额外记录设备会话和连接状态以便诊断
-            logger.LogInformation("[调试] 设备信息: Name={Name} ConnectionStatus={ConnectionStatus}", device?.Name, device?.ConnectionStatus);
+            logger.LogDebug("[调试] 设备信息: Name={Name} ConnectionStatus={ConnectionStatus}", device?.Name, device?.ConnectionStatus);
         }
         catch { }
 
@@ -98,7 +98,19 @@ public class ScreenMirrorService(
 
             var pairedDevices = matchedDevices.Count > 0 ? matchedDevices : devices.Where(d => d != null && d.Model == device.Model).ToList();
 
-            if (pairedDevices.Count > 0)
+            // 如果存在多个候选 ADB 设备，弹窗选择并预选最优（USB 优先），而不是直接选择第一个
+            if (pairedDevices.Count > 1)
+            {
+                var preferredSerial = pairedDevices.FirstOrDefault(d => d.Type == DeviceType.USB)?.Serial
+                                      ?? pairedDevices.First().Serial;
+                selectedDeviceSerial = await ShowDeviceSelectionDialog(pairedDevices, preferredSerial);
+                if (string.IsNullOrEmpty(selectedDeviceSerial))
+                {
+                    logger.LogWarning("用户在设备选择弹窗中取消或未选择设备");
+                    return false;
+                }
+            }
+            else if (pairedDevices.Count > 0)
             {
                 switch (devicePreferenceType)
                 {
@@ -254,7 +266,7 @@ public class ScreenMirrorService(
             try
             {
                 started = process.Start();
-                logger.LogInformation("[调试] scrcpy 进程 Start() 返回: {Started}", started);
+                logger.LogDebug("[调试] scrcpy 进程 Start() 返回: {Started}", started);
             }
             catch (Exception ex)
             {
@@ -507,7 +519,7 @@ public class ScreenMirrorService(
                     if ((deviceOptions[i].Tag as string) == preferredSerial)
                     {
                         deviceSelector.SelectedIndex = i;
-                        logger.LogInformation("[调试] 在设备选择弹窗中预选设备：{Serial}", preferredSerial);
+                            logger.LogDebug("[调试] 在设备选择弹窗中预选设备：{Serial}", preferredSerial);
                         break;
                     }
                 }
