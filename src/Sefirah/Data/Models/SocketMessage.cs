@@ -17,14 +17,10 @@ namespace Sefirah.Data.Models;
 [JsonDerivedType(typeof(SftpServerInfo), typeDiscriminator: "11")]
 [JsonDerivedType(typeof(UdpBroadcast), typeDiscriminator: "12")]
 [JsonDerivedType(typeof(DeviceRingerMode), typeDiscriminator: "13")]
-[JsonDerivedType(typeof(TextMessage), typeDiscriminator: "14")]
-[JsonDerivedType(typeof(TextConversation), typeDiscriminator: "15")]
-[JsonDerivedType(typeof(ThreadRequest), typeDiscriminator: "16")]
 [JsonDerivedType(typeof(AudioDevice), typeDiscriminator: "17")]
 [JsonDerivedType(typeof(PlaybackAction), typeDiscriminator: "18")]
 [JsonDerivedType(typeof(ApplicationList), typeDiscriminator: "19")]
 [JsonDerivedType(typeof(ActionMessage), typeDiscriminator: "20")]
-[JsonDerivedType(typeof(ContactMessage), typeDiscriminator: "21")]
 public class SocketMessage { }
 public class CommandMessage : SocketMessage
 {
@@ -371,78 +367,7 @@ public class DeviceRingerMode : SocketMessage
     public int RingerMode { get; set; }
 }
 
-public class TextConversation : SocketMessage
-{
-    [JsonPropertyName("conversationType")]
-    public required ConversationType ConversationType { get; set; }
 
-    [JsonPropertyName("threadId")]
-    public required long ThreadId { get; set; }
-
-    [JsonPropertyName("recipients")]
-    public List<string> Recipients { get; set; } = [];
-
-    [JsonPropertyName("messages")]
-    public List<TextMessage> Messages { get; set; } = [];
-}
-
-public class TextMessage : SocketMessage
-{
-    [JsonPropertyName("addresses")]
-    public List<string> Addresses { get; set; } = [];
-
-    [JsonPropertyName("threadId")]
-    public long? ThreadId { get; set; } = null;
-
-    [JsonPropertyName("body")]
-    public required string Body { get; set; }
-
-    [JsonPropertyName("timestamp")]
-    public long Timestamp { get; set; }
-                    
-    [JsonPropertyName("messageType")]
-    public int MessageType { get; set; }
-    
-    [JsonPropertyName("read")]
-    public bool Read { get; set; } = false;
-
-    [JsonPropertyName("uniqueId")]
-    public long UniqueId { get; set; }
-
-    [JsonPropertyName("subscriptionId")]
-    public int SubscriptionId { get; set; } = 0;
-
-    [JsonPropertyName("attachments")]
-    public List<SmsAttachment>? Attachments { get; set; } = null;
-
-    [JsonPropertyName("isTextMessage")]
-    public bool IsTextMessage { get; set; } = false;
-
-    [JsonPropertyName("hasMultipleRecipients")]
-    public bool HasMultipleRecipients { get; set; } = false;
-}
-
-public class SmsAttachment
-{
-
-    [JsonPropertyName("base64EncodedFile")]
-    public string? Base64Data { get; set; }
-
-    [JsonPropertyName("fileName")]
-    public string? FileName { get; set; }
-}
-
-public class ThreadRequest: SocketMessage
-{
-    [JsonPropertyName("threadId")]
-    public required long ThreadId { get; set; }
-    
-    [JsonPropertyName("rangeStartTimestamp")]
-    public long RangeStartTimestamp { get; set; } = -1;
-
-    [JsonPropertyName("numberToRequest")]
-    public long NumberToRequest { get; set; } = -1;
-}
 
 public class PhoneNumber
 {
@@ -453,20 +378,4 @@ public class PhoneNumber
     public int SubscriptionId { get; set; } = -1;
 }
 
-public class ContactMessage : SocketMessage
-{
-    [JsonPropertyName("id")]
-    public required string Id { get; set; }
 
-    [JsonPropertyName("lookupKey")]
-    public string? LookupKey { get; set; }
-
-    [JsonPropertyName("displayName")]
-    public required string DisplayName { get; set; }
-
-    [JsonPropertyName("number")]
-    public required string Number { get; set; }
-
-    [JsonPropertyName("photoBase64")]
-    public string? PhotoBase64 { get; set; }
-}

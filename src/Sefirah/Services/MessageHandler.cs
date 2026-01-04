@@ -12,7 +12,7 @@ public class MessageHandler(
     INetworkService networkService,
     INotificationService notificationService,
     IClipboardService clipboardService,
-    SmsHandlerService smsHandlerService,
+    
     IFileTransferService fileTransferService,
     IPlaybackService playbackService,
     IActionService actionService,
@@ -60,13 +60,7 @@ public class MessageHandler(
                     await clipboardService.SetContentAsync(clipboardMessage.Content, device);
                     break;
 
-                case TextConversation textConversation:
-                    await smsHandlerService.HandleTextMessage(device.Id, textConversation);
-                    break;
-
-                case ContactMessage contactMessage:
-                    await smsHandlerService.HandleContactMessage(device.Id, contactMessage);
-                    break;
+                // TextConversation and ContactMessage handling removed
 
                 case ActionMessage action:
                     actionService.HandleActionMessage(action);

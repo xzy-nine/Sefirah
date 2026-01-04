@@ -738,7 +738,7 @@ public class NetworkService(
                         await DispatchPayloadAsync(device, decryptedPayload);
                         break;
                     case "DATA_SUPERISLAND":
-                        logger.LogDebug("收到超级岛消息，已过滤，不向后传递");
+                        //logger.LogDebug("收到超级岛消息，已过滤，不向后传递");
                         break;
                     case "DATA_ICON_REQUEST":
                         await HandleIconRequestAsync(device, decryptedPayload);

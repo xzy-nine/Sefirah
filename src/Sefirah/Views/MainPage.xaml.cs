@@ -23,7 +23,6 @@ public sealed partial class MainPage : Page
     private readonly Dictionary<string, Type> Pages = new()
     {
         { "Settings", typeof(SettingsPage) },
-        { "Messages", typeof(MessagesPage) },
         { "Apps", typeof(AppsPage) }
     };
 

@@ -71,25 +71,7 @@ public class DatabaseContext
             db.CreateTable<ApplicationInfoEntity>();
         }
 
-        if (db.GetTableInfo(nameof(ContactEntity)).Count == 0)
-        {
-            db.CreateTable<ContactEntity>();
-        }
 
-        if (db.GetTableInfo(nameof(ConversationEntity)).Count == 0)
-        {
-            db.CreateTable<ConversationEntity>();
-        }
-
-        if (db.GetTableInfo(nameof(MessageEntity)).Count == 0)
-        {
-            db.CreateTable<MessageEntity>();
-        }
-
-        if (db.GetTableInfo(nameof(AttachmentEntity)).Count == 0)
-        {
-            db.CreateTable<AttachmentEntity>();
-        }
 
         if (db.GetTableInfo(nameof(NotificationEntity)).Count == 0)
         {

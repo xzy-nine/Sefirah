@@ -701,15 +701,7 @@
                     </NavigationView.Resources>
 
                     <NavigationView.MenuItems>
-                        <NavigationViewItem
-                            Content="{helpers:ResourceString Name=Messages}"
-                            IsSelected="True"
-                            Tag="Messages">
-                            <NavigationViewItem.Icon>
-                                <FontIcon Glyph="&#xE8BD;" />
-                            </NavigationViewItem.Icon>
-                        </NavigationViewItem>
-                        <NavigationViewItem Content="{helpers:ResourceString Name=Apps}" Tag="Apps">
+                        <NavigationViewItem Content="{helpers:ResourceString Name=Apps}" Tag="Apps" IsSelected="True">
                             <NavigationViewItem.Icon>
                                 <FontIcon Glyph="&#xED35;" />
                             </NavigationViewItem.Icon>
