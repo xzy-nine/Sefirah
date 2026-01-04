@@ -28,6 +28,14 @@ public class ScreenMirrorService(
     
     public async Task<bool> StartScrcpy(PairedDevice device, string? customArgs = null, string? iconPath = null)
     {
+        logger.LogInformation("[调试] StartScrcpy 请求: deviceId={DeviceId} customArgs={CustomArgs} iconPath={IconPath}", device?.Id, customArgs, iconPath);
+        try
+        {
+            // 额外记录设备会话和连接状态以便诊断
+            logger.LogInformation("[调试] 设备信息: Name={Name} ConnectionStatus={ConnectionStatus}", device?.Name, device?.ConnectionStatus);
+        }
+        catch { }
+
         Process? process = null;
         CancellationTokenSource? processCts = null;
 
@@ -71,33 +79,60 @@ public class ScreenMirrorService(
                 argBuilder.Add(customArgs);
             }
 
-            var pairedDevices = devices.Where(d => d != null && d.Model == device.Model).ToList();
+            // 根据已配对设备信息优先匹配 ADB 设备：
+            // 1. 优先匹配 AndroidId == PairedDevice.Id（绑定映射）
+            // 2. 否则通过型号匹配
+            // 3. 在候选中优先选择 USB（有线）设备
+            var adbOnlineDevices = devices.Where(d => d != null && d.IsOnline).ToList();
+            var matchedDevices = adbOnlineDevices.Where(d => !string.IsNullOrEmpty(d.AndroidId) && d.AndroidId == device.Id).ToList();
+
+            if (matchedDevices.Count == 0 && !string.IsNullOrEmpty(device.Model))
+            {
+                matchedDevices = adbOnlineDevices.Where(d => string.IsNullOrEmpty(d.AndroidId) &&
+                    !string.IsNullOrEmpty(d.Model) &&
+                    (device.Model.Equals(d.Model, StringComparison.OrdinalIgnoreCase) ||
+                     device.Model.Contains(d.Model, StringComparison.OrdinalIgnoreCase) ||
+                     d.Model.Contains(device.Model, StringComparison.OrdinalIgnoreCase)))
+                    .ToList();
+            }
+
+            var pairedDevices = matchedDevices.Count > 0 ? matchedDevices : devices.Where(d => d != null && d.Model == device.Model).ToList();
+
             if (pairedDevices.Count > 0)
             {
                 switch (devicePreferenceType)
                 {
                     case ScrcpyDevicePreferenceType.Usb:
-                        selectedDeviceSerial = pairedDevices.FirstOrDefault(d => d.Type == DeviceType.USB)?.Serial;
+                        // 优先选择已匹配设备中的 USB，否则从匹配列表中选择第一个
+                        selectedDeviceSerial = pairedDevices.FirstOrDefault(d => d.Type == DeviceType.USB)?.Serial
+                                            ?? pairedDevices.FirstOrDefault()?.Serial;
                         break;
                     case ScrcpyDevicePreferenceType.Tcpip:
-                        selectedDeviceSerial = pairedDevices.FirstOrDefault(d => d.Type == DeviceType.WIFI)?.Serial;
+                        selectedDeviceSerial = pairedDevices.FirstOrDefault(d => d.Type == DeviceType.WIFI)?.Serial
+                                            ?? pairedDevices.FirstOrDefault()?.Serial;
                         break;
                     case ScrcpyDevicePreferenceType.Auto:
-                        if (pairedDevices.FirstOrDefault(d => d.Type == DeviceType.USB) != null)
+                        // 优先选择 USB，如果找到了 USB 且启用了 ADB TCP/IP 模式，则追加参数
+                        var usbDevice = pairedDevices.FirstOrDefault(d => d.Type == DeviceType.USB);
+                        if (usbDevice != null)
                         {
-                            if (deviceSettings.AdbTcpipModeEnabled) 
+                            if (deviceSettings.AdbTcpipModeEnabled)
                             {
                                 argBuilder.Add("--tcpip");
                             }
-                            selectedDeviceSerial = pairedDevices.FirstOrDefault(d => d.Type == DeviceType.USB)?.Serial;
+                            selectedDeviceSerial = usbDevice.Serial;
                         }
                         else
                         {
-                            selectedDeviceSerial = pairedDevices.FirstOrDefault(d => d.Type == DeviceType.WIFI)?.Serial;
+                            selectedDeviceSerial = pairedDevices.FirstOrDefault(d => d.Type == DeviceType.WIFI)?.Serial
+                                                ?? pairedDevices.FirstOrDefault()?.Serial;
                         }
                         break;
-                    case ScrcpyDevicePreferenceType.AskEverytime:
-                        selectedDeviceSerial = await ShowDeviceSelectionDialog(pairedDevices);
+                            case ScrcpyDevicePreferenceType.AskEverytime:
+                                // 计算首选序列号：优先 USB 设备
+                                var preferred = pairedDevices.FirstOrDefault(d => d.Type == DeviceType.USB)?.Serial
+                                                ?? pairedDevices.FirstOrDefault()?.Serial;
+                                selectedDeviceSerial = await ShowDeviceSelectionDialog(pairedDevices, preferred);
                         if (string.IsNullOrEmpty(selectedDeviceSerial))
                         {
                             logger.LogWarning("未选择用于 scrcpy 的设备");
@@ -160,7 +195,10 @@ public class ScreenMirrorService(
             else if (devices.Any(d => d.IsOnline && !string.IsNullOrEmpty(d.Serial)))
             {
                 // If no paired devices found, show dialog to select from online devices
-                selectedDeviceSerial = await ShowDeviceSelectionDialog(devices.Where(d => d.IsOnline).ToList());
+                var online = devices.Where(d => d.IsOnline).ToList();
+                var preferred = online.FirstOrDefault(d => d.Type == DeviceType.USB)?.Serial
+                                ?? online.FirstOrDefault()?.Serial;
+                selectedDeviceSerial = await ShowDeviceSelectionDialog(online, preferred);
             }
             else
             {
@@ -216,6 +254,7 @@ public class ScreenMirrorService(
             try
             {
                 started = process.Start();
+                logger.LogInformation("[调试] scrcpy 进程 Start() 返回: {Started}", started);
             }
             catch (Exception ex)
             {
@@ -435,7 +474,7 @@ public class ScreenMirrorService(
         return window;
     }
 
-    private async Task<string?> ShowDeviceSelectionDialog(List<AdbDevice> onlineDevices)
+    private async Task<string?> ShowDeviceSelectionDialog(List<AdbDevice> onlineDevices, string? preferredSerial = null)
     {
         string? selectedDeviceSerial = null;
         
@@ -459,6 +498,20 @@ public class ScreenMirrorService(
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 SelectedIndex = 0
             };
+
+            // 如果提供了首选序列号，尝试设置为选中项
+            if (!string.IsNullOrEmpty(preferredSerial))
+            {
+                for (int i = 0; i < deviceOptions.Count; i++)
+                {
+                    if ((deviceOptions[i].Tag as string) == preferredSerial)
+                    {
+                        deviceSelector.SelectedIndex = i;
+                        logger.LogInformation("[调试] 在设备选择弹窗中预选设备：{Serial}", preferredSerial);
+                        break;
+                    }
+                }
+            }
 
             var dialog = new ContentDialog
             {

@@ -579,18 +579,20 @@
                                                     x:Name="DeviceButtonsRepeater"
                                                     Margin="0,5,0,0"
                                                     HorizontalAlignment="Left"
-                                                    ItemsSource="{x:Bind SourceDevices}">
+                                                    ItemsSource="{x:Bind SourceDevices}"
+                                                    Tag="{x:Bind}"
+                                                    ElementPrepared="DeviceButtonsRepeater_ElementPrepared">
                                                     <ItemsRepeater.Layout>
                                                         <StackLayout Orientation="Horizontal" Spacing="5" />
                                                     </ItemsRepeater.Layout>
                                                     <ItemsRepeater.ItemTemplate>
-                                                        <DataTemplate x:DataType="models:SourceDevice">
+                                                            <DataTemplate x:DataType="models:SourceDevice">
                                                             <Button
                                                                 Padding="8,3"
                                                                 Background="Transparent"
                                                                 BorderBrush="Gray"
                                                                 BorderThickness="1"
-                                                                Click="DeviceButtonClick"
+                                                                Click="OpenAppClick"
                                                                 Tag="{x:Bind}"
                                                                 CornerRadius="4"
                                                                 FontSize="12"

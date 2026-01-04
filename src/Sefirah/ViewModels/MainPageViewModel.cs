@@ -5,6 +5,7 @@ using Sefirah.Data.Models;
 using Sefirah.Utils;
 using Sefirah.Utils.Serialization;
 using System.ComponentModel;
+using System.Diagnostics;
 
 namespace Sefirah.ViewModels;
 public sealed partial class MainPageViewModel : BaseViewModel
@@ -175,10 +176,16 @@ public sealed partial class MainPageViewModel : BaseViewModel
 
     public async Task OpenApp(Notification notification, string? deviceId = null)
     {
+        Debug.WriteLine($"[调试] MainPageViewModel.OpenApp 被调用：notification.Key={notification?.Key} deviceId={deviceId}");
+
         // 如果未指定设备ID，使用当前活跃设备
         var targetDevice = deviceId != null ? DeviceManager.FindDeviceById(deviceId) : Device;
-        if (targetDevice == null) return;
-        
+        if (targetDevice == null)
+        {
+            Debug.WriteLine("[警告] 找不到目标设备（targetDevice 为 null），取消打开应用。请检查 deviceId 是否正确或设备是否已配对。");
+            return;
+        }
+
         var notificationToInvoke = new NotificationMessage
         {
             NotificationType = NotificationType.Invoke,
@@ -189,12 +196,17 @@ public sealed partial class MainPageViewModel : BaseViewModel
         {
             appIcon = IconUtils.GetAppIconFilePath(notification.AppPackage);
         }
+
+        Debug.WriteLine($"[调试] 调用 ScreenMirrorService.StartScrcpy: deviceId={targetDevice.Id} appPackage={notification.AppPackage} appIcon={appIcon}");
         var started = await ScreenMirrorService.StartScrcpy(targetDevice, $"--new-display --start-app={notification.AppPackage}", appIcon);
+
+        Debug.WriteLine($"[调试] ScreenMirrorService.StartScrcpy 返回: started={started}");
 
         // Scrcpy doesn't have a way of opening notifications afaik, so we will just have the notification listener on Android to open it for us
         // Plus we have to wait (2s will do ig?) until the app is actually launched to send the intent for launching the notification since Google added a lot more restrictions in this particular case
         if (started && targetDevice.ConnectionStatus)
         {
+            Debug.WriteLine($"[调试] scrcpy 已启动且设备连接，等待 2s 然后发送通知调用到设备 {targetDevice.Id}");
             await Task.Delay(2000);
             SessionManager.SendMessage(targetDevice.Id, SocketMessageSerializer.Serialize(notificationToInvoke));
         }

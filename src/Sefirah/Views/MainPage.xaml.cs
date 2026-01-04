@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Animation;
 using Sefirah.Data.Models;
@@ -124,21 +125,47 @@ public sealed partial class MainPage : Page
 
     private async void OpenAppClick(object sender, RoutedEventArgs e)
     {   
-        Notification notification = null;
-        
-        if (sender is MenuFlyoutItem menuItem && menuItem.DataContext is Notification menuItemNotification)
+        Debug.WriteLine($"[调试] OpenAppClick 被触发，sender 类型={sender?.GetType().Name}");
+
+        Notification? notification = null;
+
+        if (sender is MenuFlyoutItem menuItem)
         {
-            notification = menuItemNotification;
+            Debug.WriteLine($"[调试] MenuFlyoutItem DataContext 类型={menuItem.DataContext?.GetType().Name}");
+            if (menuItem.DataContext is Notification menuItemNotification)
+            {
+                notification = menuItemNotification;
+                Debug.WriteLine($"[调试] MenuFlyoutItem 对应通知 Key={menuItemNotification.Key} AppPackage={menuItemNotification.AppPackage}");
+            }
         }
-        else if (sender is Button button && button.CommandParameter is Notification buttonNotification)
+        else if (sender is Button button)
         {
-            notification = buttonNotification;
+            Debug.WriteLine($"[调试] Button.CommandParameter 类型={button.CommandParameter?.GetType().Name} Tag 类型={button.Tag?.GetType().Name}");
+            if (button.CommandParameter is Notification buttonNotification)
+            {
+                notification = buttonNotification;
+                Debug.WriteLine($"[调试] Button.CommandParameter 对应通知 Key={buttonNotification.Key} AppPackage={buttonNotification.AppPackage}");
+            }
+            else if (button.Tag is Notification tagNotification)
+            {
+                // 仅在极少数情况：Tag 被直接设置为 Notification
+                notification = tagNotification;
+                Debug.WriteLine($"[调试] Button.Tag 为 Notification, Key={tagNotification.Key}");
+            }
+            else if (button.Tag is SourceDevice sd)
+            {
+                Debug.WriteLine($"[调试] Button.Tag 为 SourceDevice: DeviceId={sd.DeviceId} DeviceName={sd.DeviceName}");
+            }
         }
-        
-        if (notification != null)
+
+        if (notification == null)
         {
-            await ViewModel.OpenApp(notification);
+            Debug.WriteLine("[警告] 未能在 OpenAppClick 中解析到 Notification 对象，调用链中断。检查 DeviceButtonsRepeater 是否已为按钮设置 CommandParameter 或 DataContext 继承是否生效。");
+            return;
         }
+
+        Debug.WriteLine($"[信息] 调用 ViewModel.OpenApp 通知 Key={notification.Key}");
+        await ViewModel.OpenApp(notification);
     }
 
     private void UpdateNotificationFilterClick(object sender, RoutedEventArgs e)
@@ -161,20 +188,90 @@ public sealed partial class MainPage : Page
     {
         if (sender is Button button)
         {
-            // 找到父级的Notification对象
-            DependencyObject parent = VisualTreeHelper.GetParent(button);
-            while (parent != null && !(parent is Border))
+            // 优先使用 CommandParameter（如果设置的话）
+            if (button.CommandParameter is Notification paramNotification)
+            {
+                if (button.Tag is SourceDevice sourceDeviceParam)
+                {
+                    await ViewModel.OpenApp(paramNotification, sourceDeviceParam.DeviceId);
+                }
+                else
+                {
+                    await ViewModel.OpenApp(paramNotification);
+                }
+
+                return;
+            }
+
+            // 向上遍历视觉树以查找第一个其 DataContext 为 Notification 的父元素（比仅查找 Border 更稳健）
+            DependencyObject parent = button;
+            Notification? notification = null;
+            while (parent != null)
             {
                 parent = VisualTreeHelper.GetParent(parent);
+                if (parent is FrameworkElement fe && fe.DataContext is Notification n)
+                {
+                    notification = n;
+                    break;
+                }
             }
-            
-            if (parent is Border border && border.DataContext is Notification notification)
+
+            if (notification is null) return;
+
+            // 获取按钮的 Tag，它包含设备ID和设备名称
+            if (button.Tag is SourceDevice sourceDevice)
             {
-                // 获取按钮的Tag，它包含设备ID和设备名称
-                if (button.Tag is SourceDevice sourceDevice)
+                var paired = DevicesViewModel?.PairedDevices?.FirstOrDefault(d => d.Id == sourceDevice.DeviceId);
+                if (paired != null)
                 {
                     await ViewModel.OpenApp(notification, sourceDevice.DeviceId);
                 }
+                else
+                {
+                    // 如果未找到对应的已配对设备，回退到当前活动设备以避免无响应
+                    await ViewModel.OpenApp(notification);
+                }
+            }
+        }
+    }
+
+    private void DeviceButtonsRepeater_ElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
+    {
+        if (args.Element is Button button)
+        {
+            Debug.WriteLine($"[调试] DeviceButtonsRepeater 元素准备：元素类型={args.Element?.GetType().Name}");
+
+            // 如果已经有 CommandParameter，则无需覆盖
+            if (button.CommandParameter != null)
+            {
+                Debug.WriteLine("[调试] Button 已有 CommandParameter，跳过设置。");
+                return;
+            }
+
+            // 优先使用 sender.Tag（我们在 XAML 将 ItemsRepeater.Tag 绑定为外层 Notification）
+            if (sender.Tag is Notification notifFromTag)
+            {
+                button.CommandParameter = notifFromTag;
+                Debug.WriteLine($"[调试] 从 sender.Tag 设置 CommandParameter，Notification Key={notifFromTag.Key}");
+                return;
+            }
+
+            // 否则回退到视觉树查找其父元素的 DataContext
+            DependencyObject parent = button;
+            while (parent != null)
+            {
+                parent = VisualTreeHelper.GetParent(parent);
+                if (parent is FrameworkElement fe && fe.DataContext is Notification n)
+                {
+                    button.CommandParameter = n;
+                    Debug.WriteLine($"[调试] 从视觉树找到父级 DataContext，设置 CommandParameter，Notification Key={n.Key}");
+                    break;
+                }
+            }
+
+            if (button.CommandParameter == null)
+            {
+                Debug.WriteLine("[警告] 未能为按钮设置 CommandParameter（未找到对应 Notification）。");
             }
         }
     }
