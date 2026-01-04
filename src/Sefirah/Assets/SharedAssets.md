@@ -4,9 +4,9 @@ See documentation about assets here: https://github.com/unoplatform/uno/blob/mas
 
 ## Here is a cheat sheet
 
-1. Add the image file to the `Assets` directory of a shared project.
-2. Set the build action to `Content`.
-3. (Recommended) Provide an asset for various scales/dpi
+1. 将图片文件添加到共享项目的 `Assets` 目录中。
+2. 将生成操作设置为 `Content`（内容）。
+3. （推荐）为不同的缩放/分辨率提供资源文件。
 
 ### Examples
 
