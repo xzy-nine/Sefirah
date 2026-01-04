@@ -125,7 +125,8 @@ public class NotificationService(
                 // 过滤超级岛通知，识别段是'superisland:'
                 if (message.AppPackage.StartsWith("superisland:"))
                 {
-                    logger.LogDebug("丢弃超级岛通知: {AppPackage}", message.AppPackage);
+                    // 注释掉丢弃超级岛通知的调试日志
+                    // logger.LogDebug("丢弃超级岛通知: {AppPackage}", message.AppPackage);
                     return;
                 }
 
@@ -793,7 +794,8 @@ public class NotificationService(
                 });
             }
             
-            logger.LogDebug("已更新音乐媒体块：{DeviceName} - {Title} - {Text}", device.Name, title, text);
+            // 注释掉媒体块更新的调试日志，避免控制台过多输出
+            // logger.LogDebug("已更新音乐媒体块：{DeviceName} - {Title} - {Text}", device.Name, title, text);
         }
         catch (Exception ex)
         {
@@ -812,7 +814,8 @@ public class NotificationService(
             {
                 // 超时，移除音乐媒体块
                 CurrentMusicMediaBlock = null;
-                logger.LogDebug("音乐媒体块超时，已移除");
+                // 注释掉媒体块超时移除的调试日志
+                // logger.LogDebug("音乐媒体块超时，已移除");
             }
         });
     }

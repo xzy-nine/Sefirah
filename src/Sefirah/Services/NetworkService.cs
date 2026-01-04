@@ -718,7 +718,8 @@ public class NetworkService(
                 var messageType = parts[0];
                 var encryptedPayload = string.Join(":", parts.Skip(3));
                 var decryptedPayload = NotifyCryptoHelper.Decrypt(encryptedPayload, device.SharedSecret);
-                logger.LogDebug("收到来自设备 {id} 的 {messageType} 有效负载，长度={len}", device.Id, messageType, decryptedPayload.Length);
+                // 注释掉接收 DATA 有效负载的调试日志
+                // logger.LogDebug("收到来自设备 {id} 的 {messageType} 有效负载，长度={len}", device.Id, messageType, decryptedPayload.Length);
 
                 MarkDeviceAlive(device);
                 
@@ -905,11 +906,13 @@ public class NetworkService(
         {
             if (!payload.TrimStart().StartsWith('{') && !payload.TrimStart().StartsWith('['))
             {
-                logger.LogDebug("跳过非 JSON 载荷：{payload}", payload.Length > 50 ? payload[..50] + "..." : payload);
+                // 注释掉跳过非 JSON 载荷的调试日志
+                // logger.LogDebug("跳过非 JSON 载荷：{payload}", payload.Length > 50 ? payload[..50] + "..." : payload);
                 return;
             }
             
-            logger.LogDebug("正在处理 JSON 载荷：{payload}", payload.Length > 100 ? payload[..100] + "..." : payload);
+            // 注释掉正在处理 JSON 载荷的调试日志
+            // logger.LogDebug("正在处理 JSON 载荷：{payload}", payload.Length > 100 ? payload[..100] + "..." : payload);
 
             // 首先尝试处理Notify-Relay-pc格式的JSON消息，如APP_LIST_RESPONSE和ICON_RESPONSE
             try
@@ -921,7 +924,8 @@ public class NetworkService(
                 if (root.TryGetProperty("type", out var typeProp))
                 {
                     var messageType = typeProp.GetString();
-                    logger.LogDebug("识别到Notify-Relay-pc消息类型：{messageType}");
+                    // 注释掉识别到 Notify-Relay-pc 消息类型的调试日志
+                    // logger.LogDebug("识别到Notify-Relay-pc消息类型：{messageType}");
                     
                     // 如果是Notify-Relay-pc特定消息类型，直接处理
                     if (messageType is "APP_LIST_RESPONSE" or "ICON_RESPONSE" or "AUDIO_REQUEST")
@@ -938,7 +942,8 @@ public class NetworkService(
             }
             catch (JsonException jsonEx)
             {
-                logger.LogDebug(jsonEx, "解析Notify-Relay-pc消息时出错，尝试作为普通SocketMessage处理");
+                // 注释掉解析 Notify-Relay-pc 时的调试异常日志
+                // logger.LogDebug(jsonEx, "解析Notify-Relay-pc消息时出错，尝试作为普通SocketMessage处理");
             }
 
             // 尝试作为普通SocketMessage处理
@@ -953,7 +958,8 @@ public class NetworkService(
             }
             catch (JsonException jsonEx)
             {
-                logger.LogDebug(jsonEx, "解析SocketMessage时出错，尝试作为通知消息处理");
+                // 注释掉解析 SocketMessage 时的调试异常日志
+                // logger.LogDebug(jsonEx, "解析SocketMessage时出错，尝试作为通知消息处理");
             }
 
             // 尝试作为通知消息处理
@@ -988,7 +994,8 @@ public class NetworkService(
             // 过滤超级岛通知，识别段是'superisland:'
             if (packageName.StartsWith("superisland:"))
             {
-                logger.LogDebug("丢弃超级岛通知: {PackageName}", packageName);
+                // 注释掉丢弃超级岛通知的调试日志
+                // logger.LogDebug("丢弃超级岛通知: {PackageName}", packageName);
                 return false;
             }
 
@@ -1020,7 +1027,8 @@ public class NetworkService(
         }
         catch (Exception ex)
         {
-            logger.LogDebug(ex, "解析 Notify-Relay 通知载荷失败");
+            // 注释掉解析 Notify-Relay 通知载荷失败的调试日志
+            // logger.LogDebug(ex, "解析 Notify-Relay 通知载荷失败");
             return false;
         }
     }
