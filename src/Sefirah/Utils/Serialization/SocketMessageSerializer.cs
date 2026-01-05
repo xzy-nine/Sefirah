@@ -22,56 +22,64 @@ public static class SocketMessageSerializer
     {
         try
         {
-            // 尝试直接反序列化
-            return JsonSerializer.Deserialize<SocketMessage>(json, options);
+            // 直接尝试反序列化为NotificationMessage，因为DATA_MEDIAPLAY消息应该是NotificationMessage类型
+            return JsonSerializer.Deserialize<NotificationMessage>(json, options);
         }
-        catch (JsonException)
-        {
-            // 如果直接反序列化失败，尝试修复JSON格式
-            // 对于媒体通知，我们知道它是NotificationMessage类型
-            // 检查是否包含"mediaplay:"前缀
-            if (json.Contains("mediaplay:"))
+        catch (JsonException jsonEx)
             {
-                // 尝试手动构造NotificationMessage
+                Console.WriteLine($"直接反序列化为NotificationMessage失败: {jsonEx.Message}");
+                // 如果直接反序列化为NotificationMessage失败，尝试更简单的方式
                 try
                 {
-                    // 解析JSON为JObject
+                    // 解析JSON为JsonDocument
                     using JsonDocument doc = JsonDocument.Parse(json);
                     JsonElement root = doc.RootElement;
                     
-                    // 提取必要的字段
-                    string notificationKey = root.TryGetProperty("notificationKey", out JsonElement notificationKeyElement) ? notificationKeyElement.GetString() ?? Guid.NewGuid().ToString() : Guid.NewGuid().ToString();
-                    string? appPackage = root.TryGetProperty("appPackage", out JsonElement appPackageElement) ? appPackageElement.GetString() : null;
+                    // 提取必要的字段，只使用最基本的字段
+                    string notificationKey = Guid.NewGuid().ToString();
+                    string timeStamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+                    string? appPackage = root.TryGetProperty("packageName", out JsonElement appPackageElement) ? appPackageElement.GetString() : null;
                     string? appName = root.TryGetProperty("appName", out JsonElement appNameElement) ? appNameElement.GetString() : null;
                     string? title = root.TryGetProperty("title", out JsonElement titleElement) ? titleElement.GetString() : null;
                     string? text = root.TryGetProperty("text", out JsonElement textElement) ? textElement.GetString() : null;
-                    string? bigPicture = root.TryGetProperty("bigPicture", out JsonElement bigPictureElement) ? bigPictureElement.GetString() : null;
-                    string? largeIcon = root.TryGetProperty("largeIcon", out JsonElement largeIconElement) ? largeIconElement.GetString() : null;
                     
-                    // 创建NotificationMessage对象
+                    // 提取封面URL，尝试多种可能的字段名
+                    string? coverUrl = null;
+                    if (root.TryGetProperty("coverUrl", out JsonElement coverUrlElement))
+                        coverUrl = coverUrlElement.GetString();
+                    else if (root.TryGetProperty("bigPicture", out JsonElement bigPictureElement))
+                        coverUrl = bigPictureElement.GetString();
+                    else if (root.TryGetProperty("largeIcon", out JsonElement largeIconElement))
+                        coverUrl = largeIconElement.GetString();
+                    else if (root.TryGetProperty("icon", out JsonElement iconElement))
+                        coverUrl = iconElement.GetString();
+                    
+                    // 创建NotificationMessage对象，只设置必要的字段
                     return new NotificationMessage
                     {
                         NotificationKey = notificationKey,
+                        TimeStamp = timeStamp,
                         NotificationType = NotificationType.New,
                         AppPackage = appPackage,
                         AppName = appName,
                         Title = title,
                         Text = text,
-                        BigPicture = bigPicture,
-                        LargeIcon = largeIcon
+                        CoverUrl = coverUrl
                     };
                 }
-                catch (Exception ex)
+                catch (JsonException innerJsonEx)
                 {
-                    // 如果手动构造也失败，返回null
-                    Console.WriteLine($"手动构造NotificationMessage失败: {ex.Message}");
+                    Console.WriteLine($"解析JSON时失败: {innerJsonEx.Message}");
+                    Console.WriteLine($"消息内容: {(json.Length > 100 ? json[..100] + "..." : json)}");
+                    return null;
+                }
+                catch (Exception generalEx)
+                {
+                    Console.WriteLine($"手动构造NotificationMessage失败: {generalEx.Message}");
+                    Console.WriteLine($"消息内容: {(json.Length > 100 ? json[..100] + "..." : json)}");
                     return null;
                 }
             }
-            
-            // 如果不是媒体通知，返回null
-            return null;
-        }
     }
 }
 

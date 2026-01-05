@@ -751,35 +751,52 @@ public class NotificationService(
     /// <param name="notificationMessage">通知消息</param>
     public async Task HandleMediaPlayNotification(PairedDevice device, NotificationMessage notificationMessage)
     {
+        logger.LogDebug("进入HandleMediaPlayNotification方法，设备：{deviceId}", device.Id);
         try
         {
             // 检查设备是否启用了通知同步
-            if (!device.DeviceSettings.NotificationSyncEnabled) return;
+            logger.LogDebug("检查设备通知同步设置，设备ID：{deviceId}，是否启用：{enabled}", device.Id, device.DeviceSettings.NotificationSyncEnabled);
+            if (!device.DeviceSettings.NotificationSyncEnabled)
+            {
+                logger.LogDebug("设备通知同步未启用，跳过处理媒体播放通知");
+                return;
+            }
             
             // 解析媒体播放通知的标题和文本
             // 注意：对于差异包，我们需要保留现有值，而不是将缺失的字段置空
             string title = notificationMessage.Title ?? "";
             string text = notificationMessage.Text ?? "";
             
+            logger.LogDebug("媒体播放通知内容：标题='{title}', 文本='{text}'", title, text);
+            
             // 从通知消息中提取封面URL
             string? coverUrl = null;
             if (!string.IsNullOrEmpty(notificationMessage.CoverUrl))
             {
                 coverUrl = notificationMessage.CoverUrl;
+                logger.LogDebug("从CoverUrl提取封面：{coverUrl}", coverUrl);
             }
             else if (!string.IsNullOrEmpty(notificationMessage.BigPicture))
             {
                 coverUrl = notificationMessage.BigPicture;
+                logger.LogDebug("从BigPicture提取封面：{coverUrl}", coverUrl);
             }
             else if (!string.IsNullOrEmpty(notificationMessage.LargeIcon))
             {
                 coverUrl = notificationMessage.LargeIcon;
+                logger.LogDebug("从LargeIcon提取封面：{coverUrl}", coverUrl);
+            }
+            else
+            {
+                logger.LogDebug("未找到封面URL");
             }
             
             // 更新或创建音乐媒体块
+            logger.LogDebug("当前CurrentMusicMediaBlock：{current}", CurrentMusicMediaBlock == null ? "null" : $"DeviceId={CurrentMusicMediaBlock.DeviceId}");
             if (CurrentMusicMediaBlock == null || CurrentMusicMediaBlock.DeviceId != device.Id)
             {
                 // 创建新的音乐媒体块
+                logger.LogDebug("创建新的音乐媒体块");
                 CurrentMusicMediaBlock = new MusicMediaBlock(
                     device.Id,
                     device.Name,
@@ -787,10 +804,12 @@ public class NotificationService(
                     text,
                     coverUrl
                 );
+                logger.LogDebug("新音乐媒体块创建完成");
             }
             else
             {
                 // 处理差异包：只更新那些在通知消息中明确提供的字段，保留其他字段的当前值
+                logger.LogDebug("更新现有音乐媒体块");
                 string updatedTitle = CurrentMusicMediaBlock.Title;
                 string updatedText = CurrentMusicMediaBlock.Text;
                 string? updatedCoverUrl = CurrentMusicMediaBlock.CoverUrl;
@@ -799,30 +818,42 @@ public class NotificationService(
                 if (!string.IsNullOrEmpty(notificationMessage.Title))
                 {
                     updatedTitle = notificationMessage.Title;
+                    logger.LogDebug("更新标题：{updatedTitle}", updatedTitle);
                 }
                 
                 // 只有当通知消息中明确提供了text字段时，才更新文本
                 if (!string.IsNullOrEmpty(notificationMessage.Text))
                 {
                     updatedText = notificationMessage.Text;
+                    logger.LogDebug("更新文本：{updatedText}", updatedText);
                 }
                 
                 // 只有当收到的封面URL不为空时，才更新封面URL
                 if (!string.IsNullOrEmpty(coverUrl))
                 {
                     updatedCoverUrl = coverUrl;
+                    logger.LogDebug("更新封面URL：{updatedCoverUrl}", updatedCoverUrl);
                 }
                 
                 // 在UI线程上更新音乐媒体块的属性
+                logger.LogDebug("在UI线程上更新音乐媒体块属性");
                 await dispatcher.EnqueueAsync(() =>
                 {
-                    // 更新现有音乐媒体块
-                    CurrentMusicMediaBlock?.Update(updatedTitle, updatedText, updatedCoverUrl);
+                    try
+                    {
+                        // 更新现有音乐媒体块
+                        logger.LogDebug("执行音乐媒体块更新");
+                        CurrentMusicMediaBlock?.Update(updatedTitle, updatedText, updatedCoverUrl);
+                        logger.LogDebug("音乐媒体块更新完成");
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "更新音乐媒体块属性时出错");
+                    }
                 });
             }
             
-            // 注释掉媒体块更新的调试日志，避免控制台过多输出
-            // logger.LogDebug("已更新音乐媒体块：{DeviceName} - {Title} - {Text}", device.Name, title, text);
+            logger.LogDebug("媒体播放通知处理完成");
         }
         catch (Exception ex)
         {
