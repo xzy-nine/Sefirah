@@ -1,4 +1,4 @@
-id: com.castle.sefirah
+id: com.xzyht.notifyrelay
 runtime: org.freedesktop.Platform
 runtime-version: '24.08'
 sdk: org.freedesktop.Sdk
@@ -32,9 +32,9 @@ modules:
       - type: file
         path: flatpak/com.castle.sefirah.desktop
       - type: file
-        path: flatpak/icons/48x48/com.castle.sefirah.png
+        path: flatpak/icons/48x48/com.xzyht.notifyrelay.png
       - type: file
-        path: flatpak/icons/256x256/com.castle.sefirah.png
+        path: flatpak/icons/256x256/com.xzyht.notifyrelay.png
     build-commands:
       - mkdir -p /app/bin
       - cp -r * /app/bin/
@@ -42,5 +42,5 @@ modules:
       - install -Dm644 com.castle.sefirah.desktop /app/share/applications/com.castle.sefirah.desktop
       - mkdir -p /app/share/icons/hicolor/48x48/apps
       - mkdir -p /app/share/icons/hicolor/256x256/apps
-      - install -Dm644 com.castle.sefirah.png /app/share/icons/hicolor/48x48/apps/com.castle.sefirah.png
-      - install -Dm644 com.castle.sefirah.png /app/share/icons/hicolor/256x256/apps/com.castle.sefirah.png
+      - install -Dm644 com.xzyht.notifyrelay.png /app/share/icons/hicolor/48x48/apps/com.xzyht.notifyrelay.png
+      - install -Dm644 com.xzyht.notifyrelay.png /app/share/icons/hicolor/256x256/apps/com.xzyht.notifyrelay.png

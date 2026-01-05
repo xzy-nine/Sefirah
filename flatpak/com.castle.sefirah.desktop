@@ -2,7 +2,7 @@
 Name=Sefirah
 Comment=Seamless Device Linking
 Exec=Sefirah
-Icon=com.castle.sefirah
+Icon=com.xzyht.notifyrelay
 Terminal=false
 Type=Application
 Categories=Utility;
