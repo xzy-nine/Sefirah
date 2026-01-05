@@ -27,8 +27,9 @@ public class NotificationService(
     private readonly ObservableCollection<Notification> activeNotifications = [];
     private readonly HashSet<string> loadedDeviceIds = [];
     
-    // 音乐媒体块相关
-    private MusicMediaBlock? _currentMusicMediaBlock;
+    // 音乐媒体块相关（支持多个设备同时显示）
+    private readonly ObservableCollection<MusicMediaBlock> _currentMusicMediaBlocks = new();
+    private ReadOnlyObservableCollection<MusicMediaBlock>? _currentMusicMediaBlocksReadOnly;
     private System.Threading.Timer? _musicMediaBlockTimer;
     private const int MUSIC_MEDIA_BLOCK_TIMEOUT = 30; // 30秒超时
     
@@ -47,21 +48,9 @@ public class NotificationService(
     public ReadOnlyObservableCollection<Notification> NotificationHistory => new(activeNotifications);
     
     /// <summary>
-    /// 当前显示的音乐媒体块
+    /// 当前显示的音乐媒体块列表（只读）
     /// </summary>
-    public MusicMediaBlock? CurrentMusicMediaBlock
-    {
-        get => _currentMusicMediaBlock;
-        private set
-        {
-            _ = dispatcher.EnqueueAsync(() =>
-            {
-                _currentMusicMediaBlock = value;
-                // 触发属性变更通知
-                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(CurrentMusicMediaBlock)));
-            });
-        }
-    }
+    public ReadOnlyObservableCollection<MusicMediaBlock> CurrentMusicMediaBlocks => _currentMusicMediaBlocksReadOnly ??= new ReadOnlyObservableCollection<MusicMediaBlock>(_currentMusicMediaBlocks);
 
     // Initialize the service - call this after DI container creates the instance
     public void Initialize()
@@ -791,59 +780,66 @@ public class NotificationService(
                 logger.LogDebug("未找到封面URL");
             }
             
-            // 更新或创建音乐媒体块
-            logger.LogDebug("当前CurrentMusicMediaBlock：{current}", CurrentMusicMediaBlock == null ? "null" : $"DeviceId={CurrentMusicMediaBlock.DeviceId}");
-            if (CurrentMusicMediaBlock == null || CurrentMusicMediaBlock.DeviceId != device.Id)
+            // 更新或创建音乐媒体块（支持多个设备）
+            logger.LogDebug("当前MusicMediaBlocks 数量：{count}", _currentMusicMediaBlocks.Count);
+            var existingBlock = _currentMusicMediaBlocks.FirstOrDefault(b => b.DeviceId == device.Id);
+            if (existingBlock == null)
             {
-                // 创建新的音乐媒体块
-                logger.LogDebug("创建新的音乐媒体块");
-                CurrentMusicMediaBlock = new MusicMediaBlock(
+                // 创建新的音乐媒体块并加入集合
+                logger.LogDebug("创建新的音乐媒体块，设备：{deviceId}", device.Id);
+                var newBlock = new MusicMediaBlock(
                     device.Id,
                     device.Name,
                     title,
                     text,
                     coverUrl
                 );
-                logger.LogDebug("新音乐媒体块创建完成");
+                _ = dispatcher.EnqueueAsync(() =>
+                {
+                    try
+                    {
+                        _currentMusicMediaBlocks.Add(newBlock);
+                        logger.LogDebug("新音乐媒体块已加入集合");
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "添加音乐媒体块到集合时出错");
+                    }
+                });
             }
             else
             {
-                // 处理差异包：只更新那些在通知消息中明确提供的字段，保留其他字段的当前值
-                logger.LogDebug("更新现有音乐媒体块");
-                string updatedTitle = CurrentMusicMediaBlock.Title;
-                string updatedText = CurrentMusicMediaBlock.Text;
-                string? updatedCoverUrl = CurrentMusicMediaBlock.CoverUrl;
-                
-                // 只有当通知消息中明确提供了title字段时，才更新标题
+                // 处理差异包：只更新那些在通知消息中明确提供的字段
+                logger.LogDebug("更新现有音乐媒体块，设备：{deviceId}", device.Id);
+                string updatedTitle = existingBlock.Title;
+                string updatedText = existingBlock.Text;
+                string? updatedCoverUrl = existingBlock.CoverUrl;
+
                 if (!string.IsNullOrEmpty(notificationMessage.Title))
                 {
                     updatedTitle = notificationMessage.Title;
                     logger.LogDebug("更新标题：{updatedTitle}", updatedTitle);
                 }
-                
-                // 只有当通知消息中明确提供了text字段时，才更新文本
+
                 if (!string.IsNullOrEmpty(notificationMessage.Text))
                 {
                     updatedText = notificationMessage.Text;
                     logger.LogDebug("更新文本：{updatedText}", updatedText);
                 }
-                
-                // 只有当收到的封面URL不为空时，才更新封面URL
+
                 if (!string.IsNullOrEmpty(coverUrl))
                 {
                     updatedCoverUrl = coverUrl;
                     logger.LogDebug("更新封面URL：{updatedCoverUrl}", updatedCoverUrl);
                 }
-                
+
                 // 在UI线程上更新音乐媒体块的属性
                 logger.LogDebug("在UI线程上更新音乐媒体块属性");
                 await dispatcher.EnqueueAsync(() =>
                 {
                     try
                     {
-                        // 更新现有音乐媒体块
-                        logger.LogDebug("执行音乐媒体块更新");
-                        CurrentMusicMediaBlock?.Update(updatedTitle, updatedText, updatedCoverUrl);
+                        existingBlock.Update(updatedTitle, updatedText, updatedCoverUrl);
                         logger.LogDebug("音乐媒体块更新完成");
                     }
                     catch (Exception ex)
@@ -868,12 +864,18 @@ public class NotificationService(
     {
         dispatcher.EnqueueAsync(() =>
         {
-            if (CurrentMusicMediaBlock != null && CurrentMusicMediaBlock.IsTimeout(MUSIC_MEDIA_BLOCK_TIMEOUT))
+            // 检查集合中每个媒体块是否超时，超时则移除
+            var toRemove = _currentMusicMediaBlocks.Where(b => b.IsTimeout(MUSIC_MEDIA_BLOCK_TIMEOUT)).ToList();
+            foreach (var b in toRemove)
             {
-                // 超时，移除音乐媒体块
-                CurrentMusicMediaBlock = null;
-                // 注释掉媒体块超时移除的调试日志
-                // logger.LogDebug("音乐媒体块超时，已移除");
+                try
+                {
+                    _currentMusicMediaBlocks.Remove(b);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "移除超时的音乐媒体块时出错，设备：{deviceId}", b.DeviceId);
+                }
             }
         });
     }

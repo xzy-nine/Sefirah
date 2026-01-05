@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using Sefirah.Data.Models;
 
 namespace Sefirah.Data.Contracts;
@@ -38,9 +39,9 @@ public interface INotificationService
     void HandleIconResponse(string deviceId, string packageName);
     
     /// <summary>
-    /// 当前显示的音乐媒体块
+    /// 当前显示的音乐媒体块列表（只读，支持多个设备同时显示）
     /// </summary>
-    MusicMediaBlock? CurrentMusicMediaBlock { get; }
+    ReadOnlyObservableCollection<MusicMediaBlock> CurrentMusicMediaBlocks { get; }
     
     /// <summary>
     /// 处理音乐媒体块超时

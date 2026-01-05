@@ -347,104 +347,103 @@
                             Content="{helpers:ResourceString Name=NotificationsClearButton}"
                             FontSize="14" />
                     </Grid>
-                    <!-- 音乐媒体块 -->
-                    <Grid
+                    <!-- 音乐媒体块（支持显示来自多个设备的媒体块） -->
+                    <ItemsRepeater
                         Grid.Row="1"
                         Margin="0,10,0,0"
-                        Visibility="{x:Bind ViewModel.CurrentMusicMediaBlock, Converter={StaticResource EmptyObjectToVisibilityConverter}, Mode=OneWay}">
-                        <Border
-                            Padding="10"
-                            Background="{ThemeResource CardBackgroundFillColorDefault}"
-                            BorderBrush="{ThemeResource CardStrokeColorDefault}"
-                            BorderThickness="1"
-                            CornerRadius="8">
-                            <Grid RowSpacing="10">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                </Grid.ColumnDefinitions>
-                                <!-- 音乐封面 -->
-                                <Image
-                                    Grid.Column="0"
-                                    Width="100"
-                                    Height="100"
-                                    VerticalAlignment="Top"
-                                    Source="{x:Bind ViewModel.CurrentMusicMediaBlock.CoverUrl, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}}" />
-                                <!-- 音乐信息 -->
-                                <StackPanel
-                                    Grid.Column="1"
-                                    Margin="10,0,0,0"
-                                    Spacing="5">
-                                    <!-- 音乐标题 -->
-                                    <TextBlock
-                                        FontWeight="SemiBold"
-                                        FontSize="18"
-                                        Text="{x:Bind ViewModel.CurrentMusicMediaBlock.Title, Mode=OneWay}"
-                                        TextWrapping="Wrap" />
-                                    <!-- 艺术家和专辑 -->
-                                    <TextBlock
-                                        Foreground="Gray"
-                                        FontSize="14"
-                                        Text="{x:Bind ViewModel.CurrentMusicMediaBlock.Text, Mode=OneWay}"
-                                        TextWrapping="Wrap" />
-                                    <!-- 设备名称 -->
-                                    <TextBlock
-                                        Foreground="Gray"
-                                        FontSize="12"
-                                        Text="{x:Bind ViewModel.CurrentMusicMediaBlock.DeviceName, Mode=OneWay}" />
-                                    
-                                    <!-- 媒体控制按钮 -->
-                                    <StackPanel
-                                        Orientation="Horizontal"
-                                        Margin="0,10,0,0"
-                                        Spacing="10">
-                                        <!-- 上一首按钮 -->
-                                        <Button
-                                            x:Name="PreviousButton"
-                                            Width="36"
-                                            Height="36"
-                                            Padding="0"
-                                            Background="Transparent"
-                                            BorderBrush="Gray"
-                                            BorderThickness="1"
-                                            Command="{x:Bind ViewModel.SendMediaControlCommand}"
-                                            CommandParameter="previous"
-                                            CornerRadius="18">
-                                            <FontIcon Glyph="&#xE76B;" />
-                                        </Button>
-                                        <!-- 播放/暂停按钮 -->
-                                        <Button
-                                            x:Name="PlayPauseButton"
-                                            Width="36"
-                                            Height="36"
-                                            Padding="0"
-                                            Background="Transparent"
-                                            BorderBrush="Gray"
-                                            BorderThickness="1"
-                                            Command="{x:Bind ViewModel.SendMediaControlCommand}"
-                                            CommandParameter="playPause"
-                                            CornerRadius="18">
-                                            <FontIcon Glyph="&#xE102;" />
-                                        </Button>
-                                        <!-- 下一首按钮 -->
-                                        <Button
-                                            x:Name="NextButton"
-                                            Width="36"
-                                            Height="36"
-                                            Padding="0"
-                                            Background="Transparent"
-                                            BorderBrush="Gray"
-                                            BorderThickness="1"
-                                            Command="{x:Bind ViewModel.SendMediaControlCommand}"
-                                            CommandParameter="next"
-                                            CornerRadius="18">
-                                            <FontIcon Glyph="&#xE76C;" />
-                                        </Button>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-                    </Grid>
+                        ItemsSource="{x:Bind ViewModel.CurrentMusicMediaBlocks, Mode=OneWay}">
+                        <ItemsRepeater.ItemTemplate>
+                            <DataTemplate x:DataType="models:MusicMediaBlock">
+                                <Border
+                                    Padding="10"
+                                    Margin="0,0,0,8"
+                                    Background="{ThemeResource CardBackgroundFillColorDefault}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefault}"
+                                    BorderThickness="1"
+                                    CornerRadius="8">
+                                    <Grid RowSpacing="10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <!-- 音乐封面 -->
+                                        <Image
+                                            Grid.Column="0"
+                                            Width="100"
+                                            Height="100"
+                                            VerticalAlignment="Top"
+                                            Source="{x:Bind CoverUrl, Mode=OneWay, Converter={StaticResource StringToImageSourceConverter}}" />
+                                        <!-- 音乐信息 -->
+                                        <StackPanel
+                                            Grid.Column="1"
+                                            Margin="10,0,0,0"
+                                            Spacing="5">
+                                            <!-- 音乐标题 -->
+                                            <TextBlock
+                                                FontWeight="SemiBold"
+                                                FontSize="18"
+                                                Text="{x:Bind Title, Mode=OneWay}"
+                                                TextWrapping="Wrap" />
+                                            <!-- 艺术家和专辑 -->
+                                            <TextBlock
+                                                Foreground="Gray"
+                                                FontSize="14"
+                                                Text="{x:Bind Text, Mode=OneWay}"
+                                                TextWrapping="Wrap" />
+                                            <!-- 设备名称 -->
+                                            <TextBlock
+                                                Foreground="Gray"
+                                                FontSize="12"
+                                                Text="{x:Bind DeviceName, Mode=OneWay}" />
+                                            
+                                            <!-- 媒体控制按钮（仍然使用页面级命令，命令作用于活动设备） -->
+                                            <StackPanel
+                                                Orientation="Horizontal"
+                                                Margin="0,10,0,0"
+                                                Spacing="10">
+                                                <Button
+                                                    Width="36"
+                                                    Height="36"
+                                                    Padding="0"
+                                                    Background="Transparent"
+                                                    BorderBrush="Gray"
+                                                    BorderThickness="1"
+                                                    Command="{Binding DataContext.SendMediaControlCommand, ElementName=PageRoot}"
+                                                    CommandParameter="previous"
+                                                    CornerRadius="18">
+                                                    <FontIcon Glyph="&#xE76B;" />
+                                                </Button>
+                                                <Button
+                                                    Width="36"
+                                                    Height="36"
+                                                    Padding="0"
+                                                    Background="Transparent"
+                                                    BorderBrush="Gray"
+                                                    BorderThickness="1"
+                                                    Command="{Binding DataContext.SendMediaControlCommand, ElementName=PageRoot}"
+                                                    CommandParameter="playPause"
+                                                    CornerRadius="18">
+                                                    <FontIcon Glyph="&#xE102;" />
+                                                </Button>
+                                                <Button
+                                                    Width="36"
+                                                    Height="36"
+                                                    Padding="0"
+                                                    Background="Transparent"
+                                                    BorderBrush="Gray"
+                                                    BorderThickness="1"
+                                                    Command="{Binding DataContext.SendMediaControlCommand, ElementName=PageRoot}"
+                                                    CommandParameter="next"
+                                                    CornerRadius="18">
+                                                    <FontIcon Glyph="&#xE76C;" />
+                                                </Button>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsRepeater.ItemTemplate>
+                    </ItemsRepeater>
                     
                     <!-- 通知列表 -->
                     <ScrollViewer

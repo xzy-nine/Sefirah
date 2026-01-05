@@ -26,9 +26,9 @@ public sealed partial class MainPageViewModel : BaseViewModel
     public PairedDevice? Device => DeviceManager.ActiveDevice;
     
     /// <summary>
-    /// 当前显示的音乐媒体块
+    /// 当前显示的音乐媒体块列表（支持多个设备同时显示）
     /// </summary>
-    public MusicMediaBlock? CurrentMusicMediaBlock => NotificationService.CurrentMusicMediaBlock;
+    public ReadOnlyObservableCollection<MusicMediaBlock> CurrentMusicMediaBlocks => NotificationService.CurrentMusicMediaBlocks;
 
     [ObservableProperty]
     public partial bool LoadingScrcpy { get; set; } = false;
@@ -50,14 +50,14 @@ public sealed partial class MainPageViewModel : BaseViewModel
             };
         }
         
-        // 监听 NotificationService 的 PropertyChanged 事件，当 CurrentMusicMediaBlock 变化时触发 UI 更新
+        // 监听 NotificationService 的 PropertyChanged 事件，当 MediaBlocks 列表变化时触发 UI 更新（集合自身变更由集合通知）
         if (NotificationService is INotifyPropertyChanged npc2)
         {
             npc2.PropertyChanged += (s, e) =>
             {
-                if (e.PropertyName == nameof(INotificationService.CurrentMusicMediaBlock))
+                if (e.PropertyName == nameof(INotificationService.CurrentMusicMediaBlocks))
                 {
-                    OnPropertyChanged(nameof(CurrentMusicMediaBlock));
+                    OnPropertyChanged(nameof(CurrentMusicMediaBlocks));
                 }
             };
         }
