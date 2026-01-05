@@ -169,6 +169,18 @@ public sealed partial class MainPageViewModel : BaseViewModel
     {
         NotificationService.ProcessClickAction(Device!, action.NotificationKey, action.ActionIndex);
     }
+    
+    [RelayCommand]
+    public void SendMediaControl(string action)
+    {
+        if (Device == null)
+        {
+            return;
+        }
+        
+        // 发送媒体控制请求到当前设备
+        SessionManager.SendMediaControlRequest(Device.Id, action);
+    }
 
     #endregion
 

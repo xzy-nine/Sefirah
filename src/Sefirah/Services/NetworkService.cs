@@ -92,104 +92,19 @@ public class NetworkService(
     /// <param name="deviceId">设备 ID</param>
     public void SendAppListRequest(string deviceId)
     {
-        logger.LogInformation("开始发送应用列表请求：deviceId={deviceId}", deviceId);
-        
-        _ = Task.Run(async () =>
+        // 构建应用列表请求对象
+        var requestObj = new
         {
-            try
-            {
-                var device = PairedDevices.FirstOrDefault(d => d.Id == deviceId);
-                if (device is null)
-                {
-                    logger.LogWarning("跳过发送：未找到设备 {deviceId}", deviceId);
-                    return;
-                }
-                
-                logger.LogDebug("找到设备：deviceId={deviceId}, name={deviceName}", deviceId, device.Name);
-
-                if (device.SharedSecret is null)
-                {
-                    logger.LogWarning("无法发送加密消息：设备 {deviceId} 缺少共享密钥", deviceId);
-                    return;
-                }
-                
-                logger.LogDebug("设备有共享密钥，继续发送");
-
-                if (localPublicKey is null || localDeviceId is null)
-                {
-                    logger.LogWarning("本地身份未初始化，跳过发送");
-                    return;
-                }
-                
-                logger.LogDebug("本地身份已初始化，继续发送");
-
-                // 尝试获取设备的IP地址
-                if (device.IpAddresses is null || device.IpAddresses.Count == 0)
-                {
-                    logger.LogWarning("跳过发送：设备 {deviceId} 没有IP地址", deviceId);
-                    return;
-                }
-                
-                string ipAddress = device.IpAddresses.First();
-                const int notifyRelayPort = 23333; // 使用与本机相同的端口
-                logger.LogDebug("使用设备IP地址：{ipAddress}:{port}", ipAddress, notifyRelayPort);
-
-                // 构建应用列表请求对象
-                var requestObj = new
-                {
-                    type = "APP_LIST_REQUEST",
-                    scope = "user",
-                    time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-                };
-                
-                // 序列化为 JSON
-                string requestJson = JsonSerializer.Serialize(requestObj);
-                
-                logger.LogInformation("应用列表请求 JSON：{requestJson}", requestJson);
-                
-                try
-                {
-                    logger.LogDebug("开始加密消息");
-                    var encryptedPayload = NotifyCryptoHelper.Encrypt(requestJson, device.SharedSecret);
-                    logger.LogDebug("消息加密成功，长度={length}", encryptedPayload.Length);
-                    
-                    var framedMessage = $"DATA_APP_LIST_REQUEST:{localDeviceId}:{localPublicKey}:{encryptedPayload}\n";
-                    logger.LogDebug("构建的完整消息：{framedMessage}", framedMessage.Length > 100 ? framedMessage[..100] + "..." : framedMessage);
-                    
-                    byte[] messageBytes = Encoding.UTF8.GetBytes(framedMessage);
-                    logger.LogDebug("消息字节长度：{length}", messageBytes.Length);
-
-                    // 使用TCP客户端主动连接并发送消息
-                    using var tcpClient = new System.Net.Sockets.TcpClient();
-                    logger.LogDebug("正在连接到设备：{ipAddress}:{port}", ipAddress, notifyRelayPort);
-                    await tcpClient.ConnectAsync(ipAddress, notifyRelayPort);
-                    logger.LogDebug("连接成功");
-                    
-                    using var networkStream = tcpClient.GetStream();
-                    await networkStream.WriteAsync(messageBytes, 0, messageBytes.Length);
-                    logger.LogInformation("成功发送应用列表请求：deviceId={deviceId}", deviceId);
-                    
-                    // 关闭连接
-                    tcpClient.Close();
-                }
-                catch (ObjectDisposedException ex)
-                {
-                    logger.LogError(ex, "发送应用列表请求时 Socket 已释放：deviceId={deviceId}", deviceId);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "发送应用列表请求时出错：deviceId={deviceId}", deviceId);
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "发送应用列表请求时出错：deviceId={deviceId}", deviceId);
-            }
-            finally
-            {
-                logger.LogInformation("应用列表请求发送流程结束：deviceId={deviceId}", deviceId);
-            }
-        });
+            type = "APP_LIST_REQUEST",
+            scope = "user",
+            time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+        };
+        
+        // 序列化为 JSON
+        string requestJson = JsonSerializer.Serialize(requestObj);
+        
+        // 调用通用发送方法
+        SendRequest(deviceId, "DATA_APP_LIST_REQUEST", requestJson, "应用列表请求");
     }
     
     /// <summary>
@@ -200,121 +115,38 @@ public class NetworkService(
     public void SendIconRequest(string deviceId, List<string> packageNames)
     {
         logger.LogInformation("开始发送图标请求：deviceId={deviceId}, packageCount={packageCount}", deviceId, packageNames.Count);
+
+        // 处理mediaplay:前缀，移除前缀后再发送请求
+        var processedPackageNames = packageNames.Select(packageName => 
+            packageName.StartsWith("mediaplay:") ? packageName.Substring("mediaplay:".Length) : packageName
+        ).ToList();
         
-        _ = Task.Run(async () =>
+        // 构建图标请求对象（支持单个或多个包名）
+        object requestObj;
+        if (processedPackageNames.Count == 1)
         {
-            try
+            requestObj = new
             {
-                var device = PairedDevices.FirstOrDefault(d => d.Id == deviceId);
-                if (device is null)
-                {
-                    logger.LogWarning("跳过发送：未找到设备 {deviceId}", deviceId);
-                    return;
-                }
-                
-                logger.LogDebug("找到设备：deviceId={deviceId}, name={deviceName}", deviceId, device.Name);
-
-                if (device.SharedSecret is null)
-                {
-                    logger.LogWarning("无法发送加密消息：设备 {deviceId} 缺少共享密钥", deviceId);
-                    return;
-                }
-                
-                logger.LogDebug("设备有共享密钥，继续发送");
-
-                if (localPublicKey is null || localDeviceId is null)
-                {
-                    logger.LogWarning("本地身份未初始化，跳过发送");
-                    return;
-                }
-                
-                logger.LogDebug("本地身份已初始化，继续发送");
-
-                // 尝试获取设备的IP地址
-                if (device.IpAddresses is null || device.IpAddresses.Count == 0)
-                {
-                    logger.LogWarning("跳过发送：设备 {deviceId} 没有IP地址", deviceId);
-                    return;
-                }
-                
-                string ipAddress = device.IpAddresses.First();
-                const int notifyRelayPort = 23333; // 使用与本机相同的端口
-                logger.LogDebug("使用设备IP地址：{ipAddress}:{port}", ipAddress, notifyRelayPort);
-
-                // 处理mediaplay:前缀，移除前缀后再发送请求
-                var processedPackageNames = packageNames.Select(packageName => 
-                    packageName.StartsWith("mediaplay:") ? packageName.Substring("mediaplay:".Length) : packageName
-                ).ToList();
-                
-                // 构建图标请求对象（支持单个或多个包名）
-                object requestObj;
-                if (processedPackageNames.Count == 1)
-                {
-                    requestObj = new
-                    {
-                        type = "ICON_REQUEST",
-                        packageName = processedPackageNames.First(),
-                        time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-                    };
-                }
-                else
-                {
-                    requestObj = new
-                    {
-                        type = "ICON_REQUEST",
-                        packageNames = processedPackageNames,
-                        time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-                    };
-                }
-                
-                // 序列化为 JSON
-                string requestJson = JsonSerializer.Serialize(requestObj);
-                
-                logger.LogInformation("图标请求 JSON：{requestJson}", requestJson);
-                
-                try
-                {
-                    logger.LogDebug("开始加密消息");
-                    var encryptedPayload = NotifyCryptoHelper.Encrypt(requestJson, device.SharedSecret);
-                    logger.LogDebug("消息加密成功，长度={length}", encryptedPayload.Length);
-                    
-                    var framedMessage = $"DATA_ICON_REQUEST:{localDeviceId}:{localPublicKey}:{encryptedPayload}\n";
-                    logger.LogDebug("构建的完整消息：{framedMessage}", framedMessage.Length > 100 ? framedMessage[..100] + "..." : framedMessage);
-                    
-                    byte[] messageBytes = Encoding.UTF8.GetBytes(framedMessage);
-                    logger.LogDebug("消息字节长度：{length}", messageBytes.Length);
-
-                    // 使用TCP客户端主动连接并发送消息
-                    using var tcpClient = new System.Net.Sockets.TcpClient();
-                    logger.LogDebug("正在连接到设备：{ipAddress}:{port}", ipAddress, notifyRelayPort);
-                    await tcpClient.ConnectAsync(ipAddress, notifyRelayPort);
-                    logger.LogDebug("连接成功");
-                    
-                    using var networkStream = tcpClient.GetStream();
-                    await networkStream.WriteAsync(messageBytes, 0, messageBytes.Length);
-                    logger.LogInformation("成功发送图标请求：deviceId={deviceId}, packageCount={packageCount}", deviceId, packageNames.Count);
-                    
-                    // 关闭连接
-                    tcpClient.Close();
-                }
-                catch (ObjectDisposedException ex)
-                {
-                    logger.LogError(ex, "发送图标请求时 Socket 已释放：deviceId={deviceId}", deviceId);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError(ex, "发送图标请求时出错：deviceId={deviceId}", deviceId);
-                }
-            }
-            catch (Exception ex)
+                type = "ICON_REQUEST",
+                packageName = processedPackageNames.First(),
+                time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+            };
+        }
+        else
+        {
+            requestObj = new
             {
-                logger.LogError(ex, "发送图标请求时出错：deviceId={deviceId}", deviceId);
-            }
-            finally
-            {
-                logger.LogInformation("图标请求发送流程结束：deviceId={deviceId}", deviceId);
-            }
-        });
+                type = "ICON_REQUEST",
+                packageNames = processedPackageNames,
+                time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+            };
+        }
+        
+        // 序列化为 JSON
+        string requestJson = JsonSerializer.Serialize(requestObj);
+        
+        // 调用通用发送方法
+        SendRequest(deviceId, "DATA_ICON_REQUEST", requestJson, $"图标请求，packageCount={packageNames.Count}");
     }
     
     /// <summary>
@@ -327,109 +159,161 @@ public class NetworkService(
         SendIconRequest(deviceId, new List<string> { packageName });
     }
 
-    public void SendMessage(string deviceId, string message)
+    /// <summary>
+    /// 通用发送请求方法
+    /// </summary>
+    /// <param name="deviceId">设备 ID</param>
+    /// <param name="messageType">消息类型（如 DATA_APP_LIST_REQUEST, DATA_ICON_REQUEST, DATA_MEDIA_CONTROL 等）</param>
+    /// <param name="requestJson">请求内容的 JSON 字符串</param>
+    /// <param name="description">请求描述，用于日志</param>
+    private void SendRequest(string deviceId, string messageType, string requestJson, string description)
     {
-        try
+        logger.LogInformation("开始发送请求：{description}，deviceId={deviceId}", description, deviceId);
+        
+        _ = Task.Run(async () =>
         {
-            var device = PairedDevices.FirstOrDefault(d => d.Id == deviceId);
-            if (device is null)
-            {
-                logger.LogWarning("跳过发送：未找到设备 {deviceId}", deviceId);
-                return;
-            }
-
-            if (device.SharedSecret is null)
-            {
-                logger.LogWarning("无法发送加密消息：设备 {deviceId} 缺少共享密钥", deviceId);
-                return;
-            }
-
-            if (localPublicKey is null || localDeviceId is null)
-            {
-                logger.LogWarning("本地身份未初始化，跳过发送");
-                return;
-            }
-
-            if (!TryGetSession(deviceId, out var session))
-            {
-                logger.LogTrace("跳过发送：设备 {id} 未找到会话", deviceId);
-                return;
-            }
-            
-            if (session == null)
-            {
-                logger.LogTrace("跳过发送：设备 {id} 会话为 null", deviceId);
-                return;
-            }
-            
-            if (session.Socket == null)
-            {
-                logger.LogTrace("跳过发送：设备 {id} Socket 为 null", deviceId);
-                return;
-            }
-            
             try
             {
-                if (!session.Socket.Connected)
+                var device = PairedDevices.FirstOrDefault(d => d.Id == deviceId);
+                if (device is null)
                 {
-                    logger.LogTrace("跳过发送：设备 {id} Socket 未连接", deviceId);
+                    logger.LogWarning("跳过发送：未找到设备 {deviceId}", deviceId);
                     return;
                 }
-            }
-            catch (ObjectDisposedException)
-            {
-                logger.LogTrace("跳过发送：设备 {id} Socket 已释放", deviceId);
-                return;
-            }
+                
+                logger.LogDebug("找到设备：deviceId={deviceId}, name={deviceName}", deviceId, device.Name);
 
-            // 根据消息内容选择消息类型
-            string messageType = "DATA_JSON";
-            
-            logger.LogDebug("原始消息内容：{message}", message);
-            
-            // 直接检查消息中的 type 字段值，支持不同的引号格式
-            if (message.Contains("APP_LIST_REQUEST", StringComparison.OrdinalIgnoreCase))
-            {
-                messageType = "DATA_APP_LIST_REQUEST";
-                logger.LogDebug("识别到 APP_LIST_REQUEST 消息类型");
-            }
-            else if (message.Contains("ICON_REQUEST", StringComparison.OrdinalIgnoreCase))
-            {
-                messageType = "DATA_ICON_REQUEST";
-                logger.LogDebug("识别到 ICON_REQUEST 消息类型");
-            }
-            else if (message.Contains("AUDIO_RESPONSE", StringComparison.OrdinalIgnoreCase))
-            {
-                messageType = "DATA_AUDIO_RESPONSE";
-                logger.LogDebug("识别到 AUDIO_RESPONSE 消息类型");
-            }
-            else
-            {
-                logger.LogDebug("使用默认 DATA_JSON 消息类型");
-            }
+                if (device.SharedSecret is null)
+                {
+                    logger.LogWarning("无法发送加密消息：设备 {deviceId} 缺少共享密钥", deviceId);
+                    return;
+                }
+                
+                logger.LogDebug("设备有共享密钥，继续发送");
 
-            try
-            {
-                var encryptedPayload = NotifyCryptoHelper.Encrypt(message, device.SharedSecret);
-                var framedMessage = $"{messageType}:{localDeviceId}:{localPublicKey}:{encryptedPayload}\n";
-                byte[] messageBytes = Encoding.UTF8.GetBytes(framedMessage);
+                if (localPublicKey is null || localDeviceId is null)
+                {
+                    logger.LogWarning("本地身份未初始化，跳过发送");
+                    return;
+                }
+                
+                logger.LogDebug("本地身份已初始化，继续发送");
 
-                session.Send(messageBytes, 0, messageBytes.Length);
-                logger.LogDebug("已发送消息：{messageType}，deviceId={deviceId}", messageType, deviceId);
-            }
-            catch (ObjectDisposedException ex)
-            {
-                logger.LogError(ex, "发送消息时 Socket 已释放：deviceId={deviceId}", deviceId);
+                // 尝试获取设备的IP地址
+                if (device.IpAddresses is null || device.IpAddresses.Count == 0)
+                {
+                    logger.LogWarning("跳过发送：设备 {deviceId} 没有IP地址", deviceId);
+                    return;
+                }
+                
+                string ipAddress = device.IpAddresses.First();
+                const int notifyRelayPort = 23333; // 使用与本机相同的端口
+                logger.LogDebug("使用设备IP地址：{ipAddress}:{port}", ipAddress, notifyRelayPort);
+                
+                logger.LogInformation("请求 JSON：{requestJson}", requestJson);
+                
+                try
+                {
+                    logger.LogDebug("开始加密消息");
+                    var encryptedPayload = NotifyCryptoHelper.Encrypt(requestJson, device.SharedSecret);
+                    logger.LogDebug("消息加密成功，长度={length}", encryptedPayload.Length);
+                    
+                    var framedMessage = $"{messageType}:{localDeviceId}:{localPublicKey}:{encryptedPayload}\n";
+                    logger.LogDebug("构建的完整消息：{framedMessage}", framedMessage.Length > 100 ? framedMessage[..100] + "..." : framedMessage);
+                    
+                    byte[] messageBytes = Encoding.UTF8.GetBytes(framedMessage);
+                    logger.LogDebug("消息字节长度：{length}", messageBytes.Length);
+
+                    // 使用TCP客户端主动连接并发送消息
+                    using var tcpClient = new System.Net.Sockets.TcpClient();
+                    logger.LogDebug("正在连接到设备：{ipAddress}:{port}", ipAddress, notifyRelayPort);
+                    await tcpClient.ConnectAsync(ipAddress, notifyRelayPort);
+                    logger.LogDebug("连接成功");
+                    
+                    using var networkStream = tcpClient.GetStream();
+                    await networkStream.WriteAsync(messageBytes, 0, messageBytes.Length);
+                    logger.LogInformation("成功发送请求：{description}，deviceId={deviceId}", description, deviceId);
+                    
+                    // 关闭连接
+                    tcpClient.Close();
+                }
+                catch (ObjectDisposedException ex)
+                {
+                    logger.LogError(ex, "发送请求时 Socket 已释放：deviceId={deviceId}", deviceId);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogError(ex, "发送请求时出错：deviceId={deviceId}", deviceId);
+                }
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "发送消息时出错：deviceId={deviceId}", deviceId);
+                logger.LogError(ex, "发送请求时出错：deviceId={deviceId}", deviceId);
             }
-        }
-        catch (Exception ex)
+            finally
+            {
+                logger.LogInformation("请求发送流程结束：{description}，deviceId={deviceId}", description, deviceId);
+            }
+        });
+    }
+
+    /// <summary>
+    /// 发送媒体控制请求
+    /// </summary>
+    /// <param name="deviceId">设备 ID</param>
+    /// <param name="controlType">控制类型（如 play, pause, next 等）</param>
+    public void SendMediaControlRequest(string deviceId, string controlType)
+    {
+        // 构建媒体控制请求对象
+        var requestObj = new
         {
-            logger.LogError(ex, "发送消息时出错：deviceId={deviceId}", deviceId);
+            type = "MEDIA_CONTROL",
+            action = controlType,
+            time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+        };
+        
+        // 序列化为 JSON
+        string requestJson = JsonSerializer.Serialize(requestObj);
+        
+        // 调用通用发送方法
+        SendRequest(deviceId, "DATA_MEDIA_CONTROL", requestJson, $"媒体控制请求，controlType={controlType}");
+    }
+
+    public void SendMessage(string deviceId, string message)
+    {
+        logger.LogDebug("原始消息内容：{message}", message);
+        
+        // 根据消息内容选择消息类型
+        string messageType = "DATA_JSON";
+        
+        // 直接检查消息中的 type 字段值，支持不同的引号格式
+        if (message.Contains("APP_LIST_REQUEST", StringComparison.OrdinalIgnoreCase))
+        {
+            messageType = "DATA_APP_LIST_REQUEST";
+            logger.LogDebug("识别到 APP_LIST_REQUEST 消息类型");
         }
+        else if (message.Contains("ICON_REQUEST", StringComparison.OrdinalIgnoreCase))
+        {
+            messageType = "DATA_ICON_REQUEST";
+            logger.LogDebug("识别到 ICON_REQUEST 消息类型");
+        }
+        else if (message.Contains("AUDIO_RESPONSE", StringComparison.OrdinalIgnoreCase))
+        {
+            messageType = "DATA_AUDIO_RESPONSE";
+            logger.LogDebug("识别到 AUDIO_RESPONSE 消息类型");
+        }
+        else if (message.Contains("MEDIA_CONTROL", StringComparison.OrdinalIgnoreCase))
+        {
+            messageType = "DATA_MEDIA_CONTROL";
+            logger.LogDebug("识别到 MEDIA_CONTROL 消息类型");
+        }
+        else
+        {
+            logger.LogDebug("使用默认 DATA_JSON 消息类型");
+        }
+
+        // 调用通用发送方法
+        SendRequest(deviceId, messageType, message, "通用消息");
     }
 
     public void BroadcastMessage(string message)

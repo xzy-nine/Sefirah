@@ -8,4 +8,5 @@ public interface INetworkService
     void SendAppListRequest(string deviceId);
     void SendIconRequest(string deviceId, string packageName);
     void SendIconRequest(string deviceId, List<string> packageNames);
+    void SendMediaControlRequest(string deviceId, string controlType);
 }

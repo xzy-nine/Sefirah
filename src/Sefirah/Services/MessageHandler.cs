@@ -2,6 +2,7 @@ using System.Text.Json;
 using Sefirah.Data.AppDatabase.Models;
 using Sefirah.Data.AppDatabase.Repository;
 using Sefirah.Data.Contracts;
+using Sefirah.Data.Enums;
 using Sefirah.Data.Models;
 using Sefirah.Utils;
 
@@ -142,9 +143,9 @@ public class MessageHandler(
                     logger.LogDebug("处理 ICON_RESPONSE 消息");
                     await HandleIconResponseAsync(device, root);
                     break;
-                case "AUDIO_REQUEST":
-                    logger.LogDebug("处理 AUDIO_REQUEST 消息");
-                    await HandleAudioRequestAsync(device, root);
+                case "MEDIA_CONTROL":
+                    logger.LogDebug("处理 MEDIA_CONTROL 消息");
+                    await HandleMediaControlAsync(device, root);
                     break;
                 default:
                     logger.LogWarning("不支持的 JSON 消息类型：{messageType}", messageType);
@@ -333,6 +334,64 @@ public class MessageHandler(
     }
     
     /// <summary>
+    /// 处理媒体控制消息，包括音频转发请求和媒体播放控制
+    /// </summary>
+    /// <param name="device">设备</param>
+    /// <param name="root">JSON 根元素</param>
+    private async Task HandleMediaControlAsync(PairedDevice device, JsonElement root)
+    {
+        try
+        {
+            // 获取 action 属性
+            if (!root.TryGetProperty("action", out var actionProp))
+            {
+                logger.LogWarning("MEDIA_CONTROL 消息缺少 action 属性");
+                return;
+            }
+            
+            var action = actionProp.GetString() ?? string.Empty;
+            logger.LogDebug("处理 MEDIA_CONTROL action：{action}", action);
+            
+            switch (action)
+            {
+                case "audioRequest":
+                    await HandleAudioRequestAsync(device, root);
+                    break;
+                case "playPause":
+                    // PlaybackActionType 中没有 PlayPause，需要分别处理
+                    // 这里简化处理，直接调用 Play
+                    await playbackService.HandleMediaActionAsync(new PlaybackAction 
+                    { 
+                        PlaybackActionType = PlaybackActionType.Play, 
+                        Source = "MediaControl"
+                    });
+                    break;
+                case "next":
+                    await playbackService.HandleMediaActionAsync(new PlaybackAction 
+                    { 
+                        PlaybackActionType = PlaybackActionType.Next, 
+                        Source = "MediaControl"
+                    });
+                    break;
+                case "previous":
+                    await playbackService.HandleMediaActionAsync(new PlaybackAction 
+                    { 
+                        PlaybackActionType = PlaybackActionType.Previous, 
+                        Source = "MediaControl"
+                    });
+                    break;
+                default:
+                    logger.LogWarning("不支持的 MEDIA_CONTROL action：{action}", action);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "处理 MEDIA_CONTROL 消息时出错");
+        }
+    }
+    
+    /// <summary>
     /// 处理音频转发请求
     /// </summary>
     /// <param name="device">设备</param>
@@ -349,10 +408,10 @@ public class MessageHandler(
             // 启动 scrcpy 仅音频转发
             bool success = await screenMirrorService.StartScrcpy(device, customArgs);
             
-            // 发送响应
+            // 发送响应，使用新的 MEDIA_CONTROL 格式
             string response = success
-                ? "{\"type\":\"AUDIO_RESPONSE\",\"result\":\"accepted\"}"
-                : "{\"type\":\"AUDIO_RESPONSE\",\"result\":\"rejected\"}";
+                ? "{\"type\":\"MEDIA_CONTROL\",\"action\":\"audioResponse\",\"result\":\"accepted\"}"
+                : "{\"type\":\"MEDIA_CONTROL\",\"action\":\"audioResponse\",\"result\":\"rejected\"}";
             
             // 通过 networkService 发送响应
             networkService.SendMessage(device.Id, response);
@@ -363,8 +422,8 @@ public class MessageHandler(
         {
             logger.LogError(ex, "处理音频转发请求时出错");
             
-            // 发送拒绝响应
-            string errorResponse = "{\"type\":\"AUDIO_RESPONSE\",\"result\":\"rejected\"}";
+            // 发送拒绝响应，使用新的 MEDIA_CONTROL 格式
+            string errorResponse = "{\"type\":\"MEDIA_CONTROL\",\"action\":\"audioResponse\",\"result\":\"rejected\"}";
             networkService.SendMessage(device.Id, errorResponse);
         }
     }
