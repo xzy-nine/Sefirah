@@ -326,7 +326,7 @@ public class MessageHandler(
     {
         try
         {
-            logger.LogInformation("收到音频转发请求，设备：{deviceName}", device.Name);
+            logger.LogDebug("收到音频转发请求，设备：{deviceName}", device.Name);
             
             // 构建仅音频转发的 scrcpy 参数
             string customArgs = "--no-video --no-control";
@@ -342,7 +342,7 @@ public class MessageHandler(
             // 通过 networkService 发送响应
             networkService.SendMessage(device.Id, response);
             
-            logger.LogInformation("音频转发请求处理完成，结果：{result}", success ? "accepted" : "rejected");
+            logger.LogDebug("音频转发请求处理完成，结果：{result}", success ? "accepted" : "rejected");
         }
         catch (Exception ex)
         {
