@@ -292,7 +292,7 @@ public class ScreenMirrorService(
             var isAudioOnly = deviceSettings.DisableVideoForwarding || 
                               (customArgs?.Contains("--no-video") ?? false) || 
                               args.Contains("--no-video");
-            StartProcessMonitoring(process, processCts, deviceSerial, device.Name, isAudioOnly);
+            await StartProcessMonitoring(process, processCts, deviceSerial, device.Name, isAudioOnly);
             return true;
         }
         catch (Exception ex)
@@ -305,10 +305,9 @@ public class ScreenMirrorService(
         }
     }
 
-    // 进程窗口映射，用于管理scrcpy进程和对应的窗口
-    private Dictionary<string, (Process Process, Window? Window)> scrcpyProcessesWithWindows = [];
+    // 不再为 scrcpy 创建独立窗口；仅保存 scrcpy 进程映射（见 scrcpyProcesses）
 
-    private void StartProcessMonitoring(Process process, CancellationTokenSource processCts, string deviceSerial, string deviceName, bool isAudioOnly)
+    private async Task StartProcessMonitoring(Process process, CancellationTokenSource processCts, string deviceSerial, string deviceName, bool isAudioOnly)
     {
         var errorOutput = new StringBuilder();
         
@@ -333,26 +332,14 @@ public class ScreenMirrorService(
         process.Exited += (_, _) => 
         {
             logger.LogInformation("scrcpy 进程已终止");
-            // 进程退出时关闭对应的窗口
-            if (scrcpyProcessesWithWindows.TryGetValue(deviceSerial, out var processWithWindow))
-            {
-                processWithWindow.Window?.Close();
-            }
         };
         
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
         logger.LogInformation("scrcpy 进程已启动（pid：{pid}）", process.Id);
 
-        Window? window = null;
-        // 仅在音频模式下创建音频播放窗口
-        if (isAudioOnly)
-        {
-            window = CreateAudioWindow(deviceName, deviceSerial, processCts);
-        }
-        
-        // 保存进程和窗口的映射关系
-        scrcpyProcessesWithWindows[deviceSerial] = (process, window);
+        // 不再创建独立窗口，仅记录 scrcpy 进程
+        scrcpyProcesses[deviceSerial] = process;
 
         _ = Task.Run(async () =>
         {
@@ -415,7 +402,7 @@ public class ScreenMirrorService(
             finally
             {
                 process.Dispose();
-                scrcpyProcessesWithWindows.Remove(deviceSerial);
+                scrcpyProcesses.Remove(deviceSerial);
 
                 processCts.Dispose();
                 if (ReferenceEquals(cts, processCts))
@@ -426,65 +413,7 @@ public class ScreenMirrorService(
         }, processCts.Token);
     }
 
-    private Window CreateAudioWindow(string deviceName, string deviceSerial, CancellationTokenSource processCts)
-    {
-        // 创建新窗口
-        var window = new Window
-        {
-            Title = $"正在播放{deviceName}的设备声音",
-            Content = new Grid
-            {
-                Background = new SolidColorBrush(Microsoft.UI.Colors.White),
-                Children = 
-                {
-                    new TextBlock
-                    {
-                        Text = $"正在播放{deviceName}的设备声音",
-                        HorizontalAlignment = HorizontalAlignment.Center,
-                        VerticalAlignment = VerticalAlignment.Center,
-                        Margin = new Thickness(10)
-                    }
-                }
-            }
-        };
-
-        // 设置窗口大小
-        window.ExtendsContentIntoTitleBar = false;
-        var appWindow = window.AppWindow;
-        appWindow.Resize(new Windows.Graphics.SizeInt32 { Width = 300, Height = 150 });
-
-        // 窗口关闭事件处理
-        window.Closed += (_, _) =>
-        {
-            logger.LogInformation("音频播放窗口已关闭");
-            
-            // 关闭窗口时终止对应的scrcpy进程
-            if (scrcpyProcessesWithWindows.TryGetValue(deviceSerial, out var processWithWindow))
-            {
-                var process = processWithWindow.Process;
-                if (!process.HasExited)
-                {
-                    try
-                    {
-                        process.Kill();
-                        logger.LogInformation("已终止scrcpy进程");
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError("终止scrcpy进程时出错：{ex}", ex);
-                    }
-                }
-                
-                // 取消进程监控任务
-                processCts.Cancel();
-            }
-        };
-
-        // 显示窗口
-        window.Activate();
-        
-        return window;
-    }
+    // 已移除单独的音频播放窗口实现；仅保留 scrcpy 进程管理
 
     private async Task<string?> ShowDeviceSelectionDialog(List<AdbDevice> onlineDevices, string? preferredSerial = null)
     {
