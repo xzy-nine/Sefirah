@@ -60,7 +60,7 @@ public sealed partial class TrayIconControl : UserControl
                 ? "ms-appx:///Assets/Icons/SefirahDark.ico"
                 : "ms-appx:///Assets/Icons/SefirahLight.ico";
 
-            DispatcherQueue.EnqueueAsync(() => TrayIcon.IconSource = new BitmapImage(new(iconPath)));
+            _ = DispatcherQueue.EnqueueAsync(() => TrayIcon.IconSource = new BitmapImage(new(iconPath)));
         }
         catch (Exception ex)
         {

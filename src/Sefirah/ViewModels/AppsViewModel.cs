@@ -121,7 +121,7 @@ public sealed partial class AppsViewModel : BaseViewModel
 
     private void OnApplicationListUpdated(object? sender, string deviceId)
     {
-        App.MainWindow.DispatcherQueue.EnqueueAsync(() => IsLoading = false);
+        _ = App.MainWindow.DispatcherQueue.EnqueueAsync(() => IsLoading = false);
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(HasPinnedApps));
     }

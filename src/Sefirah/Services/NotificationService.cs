@@ -54,7 +54,7 @@ public class NotificationService(
         get => _currentMusicMediaBlock;
         private set
         {
-            dispatcher.EnqueueAsync(() =>
+            _ = dispatcher.EnqueueAsync(() =>
             {
                 _currentMusicMediaBlock = value;
                 // 触发属性变更通知
@@ -347,7 +347,7 @@ public class NotificationService(
                 
             if (!notification.Pinned)
             {
-                dispatcher.EnqueueAsync(() => notifications.Remove(notification));
+                _ = dispatcher.EnqueueAsync(() => notifications.Remove(notification));
                 logger.LogDebug("已从设备 {DeviceId} 移除通知：{NotificationKey}", device.Id, notification);
 
                 notificationRepository.DeleteNotification(device.Id, notification.Key);
@@ -368,7 +368,7 @@ public class NotificationService(
 
     public void TogglePinNotification(PairedDevice device, Notification notification)
     {
-        dispatcher.EnqueueAsync(() =>
+            _ = dispatcher.EnqueueAsync(() =>
         {
             if (!deviceNotifications.TryGetValue(device.Id, out var notifications)) return;
             
@@ -419,7 +419,7 @@ public class NotificationService(
     /// </summary>
     public void ClearAllNotifications()
     {
-        dispatcher.EnqueueAsync(() =>
+        _ = dispatcher.EnqueueAsync(() =>
         {
             try
             {
@@ -462,7 +462,7 @@ public class NotificationService(
 
     public void ClearHistory(PairedDevice device)
     {
-        dispatcher.EnqueueAsync(() =>
+        _ = dispatcher.EnqueueAsync(() =>
         {
             try
             {
@@ -713,7 +713,7 @@ public class NotificationService(
     {
         try
         {
-            dispatcher.EnqueueAsync(() =>
+            _ = dispatcher.EnqueueAsync(() =>
             {
                 BadgeUpdater badgeUpdater = BadgeUpdateManager.CreateBadgeUpdaterForApplication();
                 badgeUpdater.Clear();
@@ -814,7 +814,7 @@ public class NotificationService(
                 }
                 
                 // 在UI线程上更新音乐媒体块的属性
-                dispatcher.EnqueueAsync(() =>
+                await dispatcher.EnqueueAsync(() =>
                 {
                     // 更新现有音乐媒体块
                     CurrentMusicMediaBlock?.Update(updatedTitle, updatedText, updatedCoverUrl);

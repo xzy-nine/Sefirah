@@ -78,7 +78,7 @@ public class PlaceholdersService(
             : UpdateDirectory(relativeDirectory);
     }
 
-    public async Task CreateFile(string relativeFile)
+    public Task CreateFile(string relativeFile)
     {
         var fileInfo = remoteService.GetFileInfo(relativeFile);
         var parentPath = Path.Join(rootDirectory, fileInfo.RelativeParentDirectory);
@@ -93,6 +93,7 @@ public class PlaceholdersService(
         ).ThrowIfFailed("Create placeholder failed");
 
         logger.LogInformation("已为 {path} 创建占位文件", relativeFile);
+        return Task.CompletedTask;
     }
 
     public async Task CreateDirectory(string relativeDirectory)

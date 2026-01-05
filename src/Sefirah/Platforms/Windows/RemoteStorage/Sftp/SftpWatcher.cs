@@ -23,7 +23,11 @@ public sealed class SftpWatcher(
 
     public event RemoteCreateHandler? Created;
     public event RemoteChangeHandler? Changed;
+    // 未在此类内部触发 `Renamed` 事件：重命名检测由上层 Worker（RemoteWatcher）负责。
+    // 保留此事件以满足 `IRemoteWatcher` 接口契约并允许外部订阅。
+    #pragma warning disable CS0067 // event is declared for interface implementation and used externally
     public event RemoteRenameHandler? Renamed;
+    #pragma warning restore CS0067
     public event RemoteDeleteHandler? Deleted;
 
     public async void Start(CancellationToken stoppingToken = default)

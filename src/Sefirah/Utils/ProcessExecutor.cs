@@ -17,7 +17,7 @@ public static class ProcessExecutor
 
     public static void ExecuteDelayed(string fileName, string arguments, int delay)
     {
-        Task.Run(async () =>
+        _ = Task.Run(async () =>
         {
             await Task.Delay(delay * 1000);
             ExecuteProcess(fileName, arguments);

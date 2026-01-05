@@ -387,7 +387,7 @@ public class WindowsNotificationHandler(ILogger logger, ISessionManager sessionM
         }
     }
 
-    private async void OnNotificationInvoked(AppNotificationManager sender, AppNotificationActivatedEventArgs args)
+    private void OnNotificationInvoked(AppNotificationManager sender, AppNotificationActivatedEventArgs args)
     {
         try
         {

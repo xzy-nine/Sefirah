@@ -19,7 +19,7 @@ public partial class ApplicationInfoEntity
     [Ignore]
     public List<AppDeviceInfo> AppDeviceInfoList
     {
-        get => JsonSerializer.Deserialize<List<AppDeviceInfo>>(AppDeviceInfoJson) ?? [];
+        get => JsonSerializer.Deserialize<List<AppDeviceInfo>>(AppDeviceInfoJson) ?? new List<AppDeviceInfo>();
         set => AppDeviceInfoJson = JsonSerializer.Serialize(value);
     }
 
@@ -32,8 +32,8 @@ public partial class ApplicationInfoEntity
 
     internal static async Task<ApplicationInfoEntity> FromApplicationInfoMessage(ApplicationInfoMessage info, string deviceId)
     {
-        List<AppDeviceInfo> appDeviceInfoList = [new(deviceId, NotificationFilter.ToastFeed)];
-        IconUtils.SaveAppIconToPathAsync(info.AppIcon, info.PackageName);
+        List<AppDeviceInfo> appDeviceInfoList = new List<AppDeviceInfo> { new(deviceId, NotificationFilter.ToastFeed) };
+        await IconUtils.SaveAppIconToPathAsync(info.AppIcon, info.PackageName);
         return new ApplicationInfoEntity
         {
             PackageName = info.PackageName,

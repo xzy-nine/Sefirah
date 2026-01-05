@@ -94,7 +94,7 @@ public class NetworkService(
     {
         logger.LogInformation("开始发送应用列表请求：deviceId={deviceId}", deviceId);
         
-        Task.Run(async () =>
+        _ = Task.Run(async () =>
         {
             try
             {
@@ -201,7 +201,7 @@ public class NetworkService(
     {
         logger.LogInformation("开始发送图标请求：deviceId={deviceId}, packageCount={packageCount}", deviceId, packageNames.Count);
         
-        Task.Run(async () =>
+        _ = Task.Run(async () =>
         {
             try
             {
@@ -940,10 +940,9 @@ public class NetworkService(
                     }
                 }
             }
-            catch (JsonException jsonEx)
+            catch (JsonException)
             {
                 // 注释掉解析 Notify-Relay-pc 时的调试异常日志
-                // logger.LogDebug(jsonEx, "解析Notify-Relay-pc消息时出错，尝试作为普通SocketMessage处理");
             }
 
             // 尝试作为普通SocketMessage处理
@@ -956,10 +955,9 @@ public class NetworkService(
                     return;
                 }
             }
-            catch (JsonException jsonEx)
+            catch (JsonException)
             {
                 // 注释掉解析 SocketMessage 时的调试异常日志
-                // logger.LogDebug(jsonEx, "解析SocketMessage时出错，尝试作为通知消息处理");
             }
 
             // 尝试作为通知消息处理
@@ -1025,10 +1023,8 @@ public class NetworkService(
 
             return true;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            // 注释掉解析 Notify-Relay 通知载荷失败的调试日志
-            // logger.LogDebug(ex, "解析 Notify-Relay 通知载荷失败");
             return false;
         }
     }

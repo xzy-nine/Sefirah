@@ -8,12 +8,12 @@ using FileAttributes = System.IO.FileAttributes;
 namespace Sefirah.Platforms.Windows.RemoteStorage.Sftp;
 public class SftpReadService(
     ISftpContextAccessor contextAccessor,
-    SftpClient client,
-    ILogger logger
+    SftpClient client
 ) : IRemoteReadService
 {
     protected readonly string[] _relativeDirectoryNames = [".", "..", "#Recycle"];
     protected readonly SftpContext _context = contextAccessor.Context;
+
 
     public bool Exists(string relativePath) =>
         client.Exists(GetSftpPath(relativePath));

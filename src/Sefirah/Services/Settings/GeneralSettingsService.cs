@@ -26,7 +26,7 @@ internal sealed partial class GeneralSettingsService : BaseObservableJsonSetting
         {
             if (Theme == Theme.Default)
             {
-                App.MainWindow?.DispatcherQueue.EnqueueAsync(() =>
+                _ = App.MainWindow?.DispatcherQueue.EnqueueAsync(() =>
                 {
                     ApplyTheme(App.MainWindow, null, Theme.Default);
                 });

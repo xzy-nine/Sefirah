@@ -296,7 +296,14 @@ public class FileTransferService(
         {
             CleanupFileStream();
 
-            client?.DisconnectAsync();
+            try
+            {
+                client?.DisconnectAsync();
+            }
+            catch
+            {
+                // Ignore disconnect errors during cleanup
+            }
             client?.Dispose();
             client = null;
             transferCompletionSource = null;
@@ -574,7 +581,7 @@ public class FileTransferService(
         }
     }
 
-    public async Task<ServerInfo> InitializeServer()
+    public Task<ServerInfo> InitializeServer()
     {
         // Try each port in the range
         foreach (int port in PORT_RANGE)
@@ -595,7 +602,7 @@ public class FileTransferService(
                 };
 
                 logger.Info($"文件传输服务器已在 {serverInfo.IpAddress}:{serverInfo.Port} 初始化");
-                return serverInfo;
+                return Task.FromResult(serverInfo);
             }
             catch (Exception ex)
             {

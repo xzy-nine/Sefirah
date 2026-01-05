@@ -21,7 +21,6 @@ public partial class DeviceManager(ILogger<DeviceManager> logger, DeviceReposito
     /// <summary>
     /// Event fired when the active session changes
     /// </summary>
-    public event EventHandler<PairedDevice?>? ActiveDeviceChanged;
 
     /// <summary>
     /// Event fired when the local device name changes

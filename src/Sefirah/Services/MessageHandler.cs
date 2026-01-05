@@ -78,14 +78,20 @@ public class MessageHandler(
                     break;
                 default:
                     // 检查是否为 JSON 字符串消息（Notify-Relay-pc 格式）
-                    var jsonString = message.ToString();
+                    var jsonString = message?.ToString();
+                    if (string.IsNullOrWhiteSpace(jsonString))
+                    {
+                        logger.LogWarning("收到未知或空消息：{type}", message == null ? "null" : message.GetType().Name);
+                        break;
+                    }
+
                     if (jsonString.StartsWith("{") || jsonString.StartsWith("["))
                     {
                         await HandleJsonMessageAsync(device, jsonString);
                     }
                     else
                     {
-                        logger.LogWarning("收到未知消息类型：{type}", message.GetType().Name);
+                        logger.LogWarning("收到未知消息类型：{type}", message == null ? "null" : message.GetType().Name);
                     }
                     break;
             }
@@ -105,8 +111,14 @@ public class MessageHandler(
     {
         try
         {
+            if (string.IsNullOrWhiteSpace(jsonPayload))
+            {
+                logger.LogWarning("接收到空的 JSON 负载，忽略处理");
+                return;
+            }
+
             logger.LogDebug("正在处理 JSON 消息：{jsonPayload}", jsonPayload.Length > 100 ? jsonPayload[..100] + "..." : jsonPayload);
-            
+
             using var doc = JsonDocument.Parse(jsonPayload);
             var root = doc.RootElement;
             
@@ -117,8 +129,8 @@ public class MessageHandler(
                 return;
             }
             
-            var messageType = typeProp.GetString();
-            logger.LogDebug("识别到 JSON 消息类型：{messageType}");
+            var messageType = typeProp.GetString() ?? string.Empty;
+            logger.LogDebug("识别到 JSON 消息类型：{messageType}", messageType);
             
             switch (messageType)
             {
@@ -154,7 +166,7 @@ public class MessageHandler(
     /// </summary>
     /// <param name="device">设备</param>
     /// <param name="root">JSON 根元素</param>
-    private async Task HandleAppListResponseAsync(PairedDevice device, JsonElement root)
+        private Task HandleAppListResponseAsync(PairedDevice device, JsonElement root)
     {
         try
         {
@@ -162,7 +174,7 @@ public class MessageHandler(
             if (!root.TryGetProperty("apps", out var appsArray))
             {
                 logger.LogWarning("APP_LIST_RESPONSE 缺少 apps 数组");
-                return;
+                    return Task.CompletedTask;
             }
             
             // 解析应用列表
@@ -176,7 +188,7 @@ public class MessageHandler(
                 if (string.IsNullOrEmpty(packageName))
                     continue;
                 
-                var appName = appElement.TryGetProperty("appName", out var appNameProp) ? appNameProp.GetString() : packageName;
+                var appName = appElement.TryGetProperty("appName", out var appNameProp) ? appNameProp.GetString() ?? packageName : packageName;
                 
                 // 创建应用信息实体
                 var appInfo = new ApplicationInfoMessage
@@ -212,10 +224,13 @@ public class MessageHandler(
             {
                 networkService.SendIconRequest(device.Id, packageNamesWithoutIcons);
             }
+
+            return Task.CompletedTask;
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "处理 APP_LIST_RESPONSE 时出错");
+            return Task.CompletedTask;
         }
     }
     

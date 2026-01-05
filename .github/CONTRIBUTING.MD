@@ -1,16 +1,11 @@
-# Contribution
+# 贡献
 
-Thank you for your interest in contributing to our project! 
+感谢您有兴趣为的项目做出贡献！
 
-# Code Contribution
+# 代码贡献
 
-Pull requests are welcome.
+欢迎提交 Pull Request。
 
-## Contribute
+## 如何贡献
 
-Feel free to open an issue if you want to report a bug, give feedback, or ask a question. Pull requests are very welcome!
-
-If you wish to know any specific details or questions hit me up on Discord or email, I would be happy to help.
-[the Discord server](https://discord.gg/MuvMqv4MES)
-
-If you wish to translate, you can find the project on [Crowdin](https://crowdin.com/project/sefirah)
+如果您想报告 bug、提供反馈或提出问题，请随时提交 issue。非常欢迎 Pull Request！

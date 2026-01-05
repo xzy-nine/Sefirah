@@ -215,7 +215,7 @@ public class ScreenMirrorService(
             else
             {
                 logger.LogWarning("未在 adb 中找到在线设备");
-                dispatcher?.EnqueueAsync(async () =>
+                _ = dispatcher?.EnqueueAsync(async () =>
                 {
                     var dialog = new ContentDialog
                     {
@@ -354,7 +354,7 @@ public class ScreenMirrorService(
         // 保存进程和窗口的映射关系
         scrcpyProcessesWithWindows[deviceSerial] = (process, window);
 
-        Task.Run(async () =>
+        _ = Task.Run(async () =>
         {
             try
             {

@@ -8,7 +8,7 @@ namespace Sefirah.Platforms.Windows.RemoteStorage.Sftp;
 public class SftpReadWriteService(
     ISftpContextAccessor contextAccessor,
     SftpClient client,
-    ILogger logger) : SftpReadService(contextAccessor, client, logger), IRemoteReadWriteService
+    ILogger logger) : SftpReadService(contextAccessor, client), IRemoteReadWriteService
 {
 #pragma warning restore CS9107
     public async Task CreateFile(FileInfo sourceFileInfo, string relativeFile)

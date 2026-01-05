@@ -170,7 +170,7 @@ public sealed partial class GeneralViewModel : BaseViewModel
 
     private void LoadLocalDeviceName()
     {
-        dispatcher.EnqueueAsync(async () =>
+        _ = dispatcher.EnqueueAsync(async () =>
         {
             localDevice = await _deviceManager.GetLocalDeviceAsync();
             LocalDeviceName = localDevice.DeviceName;

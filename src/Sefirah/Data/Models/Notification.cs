@@ -147,7 +147,7 @@ public partial class Notification : ObservableObject
             await bitmapImage.SetSourceAsync(await GetStreamForUriAsync(new Uri(IconPath)));
             Icon = bitmapImage;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             // 忽略加载错误
         }
