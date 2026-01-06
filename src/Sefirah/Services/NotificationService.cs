@@ -193,32 +193,47 @@ public class NotificationService(
                         {
                             await EnsureNotificationsLoadedAsync(device);
                             var notifications = GetOrCreateNotificationCollection(device);
-                            var notification = await Notification.FromMessage(message);
-                            notification.AddSourceDevice(device.Id, device.Name);
                             
-                            // 确保图标路径和图标正确设置，无论设备是否活跃
-                            if (!string.IsNullOrEmpty(message.AppPackage))
+                            // 先创建一个临时notification对象，仅用于检查是否存在相同内容的通知
+                            var tempNotification = new Notification
                             {
-                                string iconPath = IconUtils.GetAppIconPath(message.AppPackage);
-                                notification.IconPath = iconPath;
-                                
-                                // 确保图标文件存在
-                                if (IconUtils.AppIconExists(message.AppPackage))
-                                {
-                                    // 立即同步加载图标，确保通知能显示图标
-                                    await notification.LoadIconAsync();
-                                }
-                            }
+                                AppPackage = message.AppPackage,
+                                Title = message.Title,
+                                Text = message.Text,
+                                Type = NotificationType.New
+                            };
                             
                             // 检查是否存在内容相同的现有通知（跨设备聚合）
                             var contentMatchNotification = activeNotifications.FirstOrDefault(n => 
-                                n.AppPackage == notification.AppPackage &&
-                                n.Title == notification.Title &&
-                                n.Text == notification.Text &&
-                                n.Type == NotificationType.New);
+                                n.AppPackage == tempNotification.AppPackage &&
+                                n.Title == tempNotification.Title &&
+                                n.Text == tempNotification.Text &&
+                                n.Type == tempNotification.Type);
                             
                             // 只有当通知是新的（即之前没有相同内容的通知）时，才会发送到Windows通知中心
                             bool shouldSendNotification = contentMatchNotification is null;
+                            
+                            // 创建正式notification对象并加载图标（仅当需要发送到Windows通知中心时）
+                            Notification? notification = null;
+                            if (shouldSendNotification || message.NotificationType != NotificationType.New)
+                            {
+                                notification = await Notification.FromMessage(message);
+                                notification.AddSourceDevice(device.Id, device.Name);
+                                
+                                // 确保图标路径和图标正确设置，无论设备是否活跃
+                                if (!string.IsNullOrEmpty(message.AppPackage))
+                                {
+                                    string iconPath = IconUtils.GetAppIconPath(message.AppPackage);
+                                    notification.IconPath = iconPath;
+                                    
+                                    // 确保图标文件存在
+                                    if (IconUtils.AppIconExists(message.AppPackage))
+                                    {
+                                        // 立即同步加载图标，确保通知能显示图标
+                                        await notification.LoadIconAsync();
+                                    }
+                                }
+                            }
                             
                             bool shouldSaveNotification = true;
                             
@@ -251,6 +266,13 @@ public class NotificationService(
                                 }
                                 else
                                 {
+                                    // 确保notification对象已创建
+                                    if (notification == null)
+                                    {
+                                        notification = await Notification.FromMessage(message);
+                                        notification.AddSourceDevice(device.Id, device.Name);
+                                    }
+                                    
                                     // 检查设备本地是否已有相同Key的通知
                                     var existingNotification = notifications.FirstOrDefault(n => n.Key == notification.Key);
 
@@ -279,6 +301,12 @@ public class NotificationService(
                             else if ((message.NotificationType is NotificationType.Active || message.NotificationType is NotificationType.New)
                                 && (filter is NotificationFilter.Feed || filter is NotificationFilter.ToastFeed))
                             {
+                                // 确保notification对象已创建
+                                if (notification == null)
+                                {
+                                    notification = await Notification.FromMessage(message);
+                                    notification.AddSourceDevice(device.Id, device.Name);
+                                }
                                 notifications.Add(notification);
                             }
                             else
@@ -286,7 +314,7 @@ public class NotificationService(
                                 shouldSaveNotification = false;
                             }
                             
-                            if (shouldSaveNotification)
+                            if (shouldSaveNotification && notification != null)
                             {
                                 notificationRepository.UpsertNotification(device.Id, message, notification.Pinned);
                                 
@@ -740,14 +768,14 @@ public class NotificationService(
     /// <param name="notificationMessage">通知消息</param>
     public async Task HandleMediaPlayNotification(PairedDevice device, NotificationMessage notificationMessage)
     {
-        logger.LogDebug("进入HandleMediaPlayNotification方法，设备：{deviceId}", device.Id);
+        // logger.LogDebug("进入HandleMediaPlayNotification方法，设备：{deviceId}", device.Id);
         try
         {
             // 检查设备是否启用了通知同步
-            logger.LogDebug("检查设备通知同步设置，设备ID：{deviceId}，是否启用：{enabled}", device.Id, device.DeviceSettings.NotificationSyncEnabled);
+            // logger.LogDebug("检查设备通知同步设置，设备ID：{deviceId}，是否启用：{enabled}", device.Id, device.DeviceSettings.NotificationSyncEnabled);
             if (!device.DeviceSettings.NotificationSyncEnabled)
             {
-                logger.LogDebug("设备通知同步未启用，跳过处理媒体播放通知");
+                // logger.LogDebug("设备通知同步未启用，跳过处理媒体播放通知");
                 return;
             }
             
@@ -756,28 +784,28 @@ public class NotificationService(
             string title = notificationMessage.Title ?? "";
             string text = notificationMessage.Text ?? "";
             
-            logger.LogDebug("媒体播放通知内容：标题='{title}', 文本='{text}'", title, text);
+            // logger.LogDebug("媒体播放通知内容：标题='{title}', 文本='{text}'", title, text);
             
             // 从通知消息中提取封面URL
             string? coverUrl = null;
             if (!string.IsNullOrEmpty(notificationMessage.CoverUrl))
             {
                 coverUrl = notificationMessage.CoverUrl;
-                logger.LogDebug("从CoverUrl提取封面：{coverUrl}", coverUrl);
+                // logger.LogDebug("从CoverUrl提取封面：{coverUrl}", coverUrl);
             }
             else if (!string.IsNullOrEmpty(notificationMessage.BigPicture))
             {
                 coverUrl = notificationMessage.BigPicture;
-                logger.LogDebug("从BigPicture提取封面：{coverUrl}", coverUrl);
+                // logger.LogDebug("从BigPicture提取封面：{coverUrl}", coverUrl);
             }
             else if (!string.IsNullOrEmpty(notificationMessage.LargeIcon))
             {
                 coverUrl = notificationMessage.LargeIcon;
-                logger.LogDebug("从LargeIcon提取封面：{coverUrl}", coverUrl);
+                // logger.LogDebug("从LargeIcon提取封面：{coverUrl}", coverUrl);
             }
             else
             {
-                logger.LogDebug("未找到封面URL");
+                // logger.LogDebug("未找到封面URL");
             }
             
             // 所有对_currentMusicMediaBlocks集合的访问都必须在UI线程上进行
@@ -786,12 +814,12 @@ public class NotificationService(
                 try
                 {
                     // 更新或创建音乐媒体块（支持多个设备）
-                    logger.LogDebug("当前MusicMediaBlocks 数量：{count}", _currentMusicMediaBlocks.Count);
+                    // logger.LogDebug("当前MusicMediaBlocks 数量：{count}", _currentMusicMediaBlocks.Count);
                     var existingBlock = _currentMusicMediaBlocks.FirstOrDefault(b => b.DeviceId == device.Id);
                     if (existingBlock == null)
                     {
                         // 创建新的音乐媒体块并加入集合
-                        logger.LogDebug("创建新的音乐媒体块，设备：{deviceId}", device.Id);
+                        // logger.LogDebug("创建新的音乐媒体块，设备：{deviceId}", device.Id);
                         var newBlock = new MusicMediaBlock(
                             device.Id,
                             device.Name,
@@ -800,12 +828,12 @@ public class NotificationService(
                             coverUrl
                         );
                         _currentMusicMediaBlocks.Add(newBlock);
-                        logger.LogDebug("新音乐媒体块已加入集合");
+                        // logger.LogDebug("新音乐媒体块已加入集合");
                     }
                     else
                     {
                         // 处理差异包：只更新那些在通知消息中明确提供的字段
-                        logger.LogDebug("更新现有音乐媒体块，设备：{deviceId}", device.Id);
+                        // logger.LogDebug("更新现有音乐媒体块，设备：{deviceId}", device.Id);
                         string updatedTitle = existingBlock.Title;
                         string updatedText = existingBlock.Text;
                         string? updatedCoverUrl = existingBlock.CoverUrl;
@@ -813,27 +841,27 @@ public class NotificationService(
                         if (!string.IsNullOrEmpty(notificationMessage.Title))
                         {
                             updatedTitle = notificationMessage.Title;
-                            logger.LogDebug("更新标题：{updatedTitle}", updatedTitle);
+                            // logger.LogDebug("更新标题：{updatedTitle}", updatedTitle);
                         }
 
                         if (!string.IsNullOrEmpty(notificationMessage.Text))
                         {
                             updatedText = notificationMessage.Text;
-                            logger.LogDebug("更新文本：{updatedText}", updatedText);
+                            // logger.LogDebug("更新文本：{updatedText}", updatedText);
                         }
 
                         if (!string.IsNullOrEmpty(coverUrl))
                         {
                             updatedCoverUrl = coverUrl;
-                            logger.LogDebug("更新封面URL：{updatedCoverUrl}", updatedCoverUrl);
+                            // logger.LogDebug("更新封面URL：{updatedCoverUrl}", updatedCoverUrl);
                         }
 
                         // 直接更新音乐媒体块的属性
                         existingBlock.Update(updatedTitle, updatedText, updatedCoverUrl);
-                        logger.LogDebug("音乐媒体块更新完成");
+                        // logger.LogDebug("音乐媒体块更新完成");
                     }
                     
-                    logger.LogDebug("媒体播放通知处理完成");
+                    // logger.LogDebug("媒体播放通知处理完成");
                 }
                 catch (Exception ex)
                 {

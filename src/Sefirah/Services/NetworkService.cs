@@ -668,8 +668,8 @@ public class NetworkService(
                     
                 case "DATA_MEDIAPLAY":
                     // 媒体播放信息，直接调用媒体播放通知处理
-                    logger.LogDebug("收到DATA_MEDIAPLAY消息，设备：{deviceId}", device.Id);
-                    logger.LogDebug("DATA_MEDIAPLAY消息内容：{payload}", decryptedPayload.Length > 100 ? decryptedPayload[..100] + "..." : decryptedPayload);
+                    logger.LogTrace("收到DATA_MEDIAPLAY消息，设备：{deviceId}", device.Id);
+                    // logger.LogDebug("DATA_MEDIAPLAY消息内容：{payload}", decryptedPayload.Length > 100 ? decryptedPayload[..100] + "..." : decryptedPayload);
                     try
                     {
                         // 直接使用JsonDocument解析DATA_MEDIAPLAY消息
@@ -728,11 +728,11 @@ public class NetworkService(
                             CoverUrl = root.TryGetProperty("coverUrl", out JsonElement coverUrlElement) && coverUrlElement.ValueKind == JsonValueKind.String ? coverUrlElement.GetString() : null
                         };
                         
-                        logger.LogDebug("成功构造NotificationMessage对象");
+                        // logger.LogDebug("成功构造NotificationMessage对象");
                         var notificationService = Ioc.Default.GetRequiredService<INotificationService>();
-                        logger.LogDebug("调用HandleMediaPlayNotification处理媒体播放通知");
+                        // logger.LogDebug("调用HandleMediaPlayNotification处理媒体播放通知");
                         await notificationService.HandleMediaPlayNotification(device, notificationMessage);
-                        logger.LogDebug("媒体播放通知处理完成");
+                        // logger.LogDebug("媒体播放通知处理完成");
                     }
                     catch (JsonException jsonEx)
                     {
