@@ -46,6 +46,9 @@ public static class AppLifecycleHelper
         await windowsNotificationHandler.RegisterForNotifications();
 #endif
 
+        // 首先生成并初始化UUID，确保所有服务启动前UUID已可用
+        await deviceManager.GetLocalDeviceAsync();
+        
         notificationService.Initialize();
         await deviceManager.Initialize();
 

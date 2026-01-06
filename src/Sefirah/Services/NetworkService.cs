@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -31,7 +32,7 @@ public class NetworkService(
     private bool isRunning;
 
     private readonly Lazy<IMessageHandler> messageHandler = new(messageHandlerFactory);
-    private readonly Dictionary<Guid, string> sessionBuffers = new();
+    private readonly ConcurrentDictionary<Guid, string> sessionBuffers = new();
     private readonly Dictionary<string, ServerSession> deviceSessions = new();
     private readonly Dictionary<Guid, string> sessionDeviceMap = new();
     private readonly object sessionLock = new();
@@ -438,7 +439,7 @@ public class NetworkService(
 
     public void OnDisconnected(ServerSession session)
     {
-        sessionBuffers.Remove(session.Id);
+        sessionBuffers.TryRemove(session.Id, out _);
         UnbindSession(session);
         DetachSession(session);
     }
@@ -487,7 +488,14 @@ public class NetworkService(
                 }
             }
 
-            sessionBuffers[session.Id] = bufferedData;
+            if (string.IsNullOrEmpty(bufferedData))
+            {
+                sessionBuffers.TryRemove(session.Id, out _);
+            }
+            else
+            {
+                sessionBuffers[session.Id] = bufferedData;
+            }
         }
         catch (Exception ex)
         {
@@ -1126,7 +1134,7 @@ public class NetworkService(
     {
         try
         {
-            sessionBuffers.Remove(session.Id);
+            sessionBuffers.TryRemove(session.Id, out _);
             UnbindSession(session);
             session.Disconnect();
             session.Dispose();
