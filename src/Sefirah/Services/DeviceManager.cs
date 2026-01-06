@@ -205,7 +205,20 @@ public partial class DeviceManager(ILogger<DeviceManager> logger, DeviceReposito
     {
         try
         {
-            var localDevice = repository.GetLocalDevice();
+            LocalDeviceEntity? localDevice = null;
+            int retryCount = 0;
+            const int maxRetries = 3;
+
+            // 尝试多次获取本地设备，确保数据库连接稳定
+            while (localDevice is null && retryCount < maxRetries)
+            {
+                localDevice = repository.GetLocalDevice();
+                if (localDevice is null)
+                {
+                    retryCount++;
+                    await Task.Delay(100); // 等待100毫秒后重试
+                }
+            }
 
             if (localDevice is null)
             {
@@ -219,7 +232,15 @@ public partial class DeviceManager(ILogger<DeviceManager> logger, DeviceReposito
                     PrivateKey = Array.Empty<byte>(),
                 };
 
+                // 保存本地设备到数据库
                 repository.AddOrUpdateLocalDevice(localDevice);
+
+                // 验证保存是否成功
+                var savedDevice = repository.GetLocalDevice();
+                if (savedDevice is null || savedDevice.DeviceId != localDevice.DeviceId)
+                {
+                    logger.LogError("保存本地设备失败，UUID可能会在下次启动时重新生成");
+                }
             }
             else
             {

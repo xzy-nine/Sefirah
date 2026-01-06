@@ -2,9 +2,10 @@ using Sefirah.Data.AppDatabase.Models;
 using SQLite;
 namespace Sefirah.Data.AppDatabase;
 
-public class DatabaseContext
+public class DatabaseContext : IDisposable
 {
     public SQLiteConnection Database { get; private set; }
+    private bool _disposed = false;
 
     public DatabaseContext(ILogger<DatabaseContext> logger)
     {
@@ -71,13 +72,38 @@ public class DatabaseContext
             db.CreateTable<ApplicationInfoEntity>();
         }
 
-
-
         if (db.GetTableInfo(nameof(NotificationEntity)).Count == 0)
         {
             db.CreateTable<NotificationEntity>();
         }
 
         return db;
+    }
+
+    // 实现 IDisposable 接口
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_disposed)
+        {
+            if (disposing)
+            {
+                // 释放托管资源
+                Database?.Dispose();
+                Database = null;
+            }
+            _disposed = true;
+        }
+    }
+
+    // 析构函数
+    ~DatabaseContext()
+    {
+        Dispose(false);
     }
 }

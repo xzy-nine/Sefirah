@@ -40,14 +40,32 @@ public static class AppLifecycleHelper
         var actionService = Ioc.Default.GetRequiredService<IActionService>();
 
         var updateService = Ioc.Default.GetRequiredService<IUpdateService>();
+        var logger = Ioc.Default.GetRequiredService<ILogger<App>>();
 
 #if WINDOWS
         var windowsNotificationHandler = Ioc.Default.GetRequiredService<IPlatformNotificationHandler>();
         await windowsNotificationHandler.RegisterForNotifications();
 #endif
 
-        // 首先生成并初始化UUID，确保所有服务启动前UUID已可用
-        await deviceManager.GetLocalDeviceAsync();
+        // 1. 首先初始化数据库上下文，确保数据库连接稳定
+        var databaseContext = Ioc.Default.GetRequiredService<DatabaseContext>();
+        var deviceRepository = Ioc.Default.GetRequiredService<DeviceRepository>();
+        
+        // 2. 预热数据库，确保表结构正确
+        var localDevice = deviceRepository.GetLocalDevice();
+        if (localDevice is null)
+        {
+            logger.LogInformation("数据库预热：本地设备不存在，将在后续生成");
+        }
+        else
+        {
+            logger.LogInformation("数据库预热：找到本地设备，DeviceId: {deviceId}", localDevice.DeviceId);
+        }
+        
+        // 3. 生成并初始化UUID，确保所有服务启动前UUID已可用
+        logger.LogInformation("开始生成并初始化UUID");
+        localDevice = await deviceManager.GetLocalDeviceAsync();
+        logger.LogInformation("UUID初始化完成，DeviceId: {deviceId}", localDevice.DeviceId);
         
         notificationService.Initialize();
         await deviceManager.Initialize();
