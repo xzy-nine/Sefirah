@@ -18,6 +18,7 @@ public sealed partial class MainPage : Page
         InitializeComponent();
         ViewModel = Ioc.Default.GetRequiredService<MainPageViewModel>();
         DevicesViewModel = Ioc.Default.GetRequiredService<DevicesViewModel>();
+        DataContext = ViewModel;
     }
 
     private readonly Dictionary<string, Type> Pages = new()
