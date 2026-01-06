@@ -18,6 +18,7 @@ using Sefirah.Services.Socket;
 using Sefirah.Utils;
 using Sefirah.Utils.Serialization;
 using Uno.Logging;
+using Windows.Devices.Power;
 
 namespace Sefirah.Services;
 public class NetworkService(
@@ -40,7 +41,7 @@ public class NetworkService(
     private string? localDeviceId;
     private Timer? heartbeatTimer;
     private readonly TimeSpan heartbeatInterval = TimeSpan.FromSeconds(4);
-    private readonly TimeSpan heartbeatTimeout = TimeSpan.FromSeconds(25);
+    private readonly TimeSpan heartbeatTimeout = TimeSpan.FromSeconds(15);
     
     private ObservableCollection<PairedDevice> PairedDevices => deviceManager.PairedDevices;
 
@@ -613,7 +614,7 @@ public class NetworkService(
         }
     }
 
-    private async Task ProcessProtocolMessageAsync(PairedDevice device, string message)
+    public async Task ProcessProtocolMessageAsync(PairedDevice device, string message)
     {
         try
         {
@@ -621,6 +622,29 @@ public class NetworkService(
             if (message.StartsWith("HEARTBEAT:"))
             {
                 // 处理心跳包
+                // 心跳格式：HEARTBEAT:<deviceUuid><设备电量%>
+                // UUID固定为36个字符（8-4-4-4-12格式），电量在UUID后直接拼接
+                const string heartbeatPrefix = "HEARTBEAT:";
+                if (message.Length > heartbeatPrefix.Length + 36)
+                {
+                    // 提取电量信息
+                    var batteryStr = message.Substring(heartbeatPrefix.Length + 36);
+                    var batteryLevel = 0;
+                    if (int.TryParse(batteryStr, out var parsedBattery))
+                    {
+                        batteryLevel = Math.Clamp(parsedBattery, 0, 100);
+                    }
+                    
+                    // 更新设备状态
+                    var deviceStatus = new DeviceStatus
+                    {
+                        BatteryStatus = batteryLevel
+                    };
+                    
+                    // 调用设备管理器更新设备状态
+                    deviceManager.UpdateDeviceStatus(device, deviceStatus);
+                }
+                
                 MarkDeviceAlive(device);
                 return;
             }
@@ -893,11 +917,30 @@ public class NetworkService(
     {
         try
         {
-            var parts = message.Split(':');
-            if (parts.Length < 3) return null;
-
-            var remoteDeviceId = parts[1];
-            var remotePublicKey = parts[2];
+            string remoteDeviceId;
+            string remotePublicKey = string.Empty;
+            
+            if (message.StartsWith("HEARTBEAT:"))
+            {
+                // 处理新的心跳格式：HEARTBEAT:<deviceUuid><设备电量%>
+                const string heartbeatPrefix = "HEARTBEAT:";
+                if (message.Length > heartbeatPrefix.Length + 36)
+                {
+                    remoteDeviceId = message.Substring(heartbeatPrefix.Length, 36);
+                }
+                else
+                {
+                    return null;
+                }
+            }
+            else
+            {
+                // 处理其他格式
+                var parts = message.Split(':');
+                if (parts.Length < 3) return null;
+                remoteDeviceId = parts[1];
+                remotePublicKey = parts[2];
+            }
 
             var device = PairedDevices.FirstOrDefault(d => d.Id == remoteDeviceId);
             if (device is null) return null;
@@ -1204,11 +1247,7 @@ public class NetworkService(
         UpdateDeviceState(device, d =>
         {
             d.Session = null;
-            if (d.ConnectionStatus)
-            {
-                d.ConnectionStatus = false;
-                ConnectionStatusChanged?.Invoke(this, (d, false));
-            }
+            // 不要在TCP会话断开时立即标记为离线，由心跳超时决定
             logger.LogTrace($"设备 {d.Name} 的会话已解绑");
         });
     }
@@ -1227,6 +1266,41 @@ public class NetworkService(
         });
     }
 
+    /// <summary>
+    /// 获取系统电量百分比
+    /// </summary>
+    private int GetSystemBatteryLevel()
+    {
+        try
+        {
+            // 使用Windows.Devices.Power API获取电量
+            var batteryReport = Battery.AggregateBattery.GetReport();
+            
+            // 检查电量信息是否可用
+            if (batteryReport.RemainingCapacityInMilliwattHours.HasValue &&
+                batteryReport.FullChargeCapacityInMilliwattHours.HasValue &&
+                batteryReport.FullChargeCapacityInMilliwattHours.Value > 0)
+            {
+                // 计算电量百分比
+                var remainingCapacity = batteryReport.RemainingCapacityInMilliwattHours.Value;
+                var fullCapacity = batteryReport.FullChargeCapacityInMilliwattHours.Value;
+                var batteryLevel = (int)Math.Round((double)remainingCapacity / fullCapacity * 100);
+                
+                // 确保电量值在0-100之间
+                return Math.Clamp(batteryLevel, 0, 100);
+            }
+            
+            // 如果无法获取电量信息，返回默认值100%
+            return 100;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning("获取系统电量失败：{ex}", ex);
+            // 异常情况下返回默认值100%
+            return 100;
+        }
+    }
+
     private void StartHeartbeat()
     {
         heartbeatTimer ??= new Timer(_ => HeartbeatTick(), null, heartbeatInterval, heartbeatInterval);
@@ -1236,20 +1310,34 @@ public class NetworkService(
     {
         try
         {
-            if (localDeviceId is null || localPublicKey is null) return;
+            if (localDeviceId is null) return;
 
-            var payload = $"HEARTBEAT:{localDeviceId}:{localPublicKey}\n";
+            // 获取PC设备电量百分比
+            var batteryLevel = GetSystemBatteryLevel(); // 接入系统电量API
+            
+            // 心跳格式：HEARTBEAT:<deviceUuid><设备电量%>
+            var payload = $"HEARTBEAT:{localDeviceId}{batteryLevel}";
             var bytes = Encoding.UTF8.GetBytes(payload);
+            const int udpPort = 23334; // 使用与Android端相同的UDP端口
 
-            foreach (var (deviceId, session) in GetSessionSnapshot())
+            // 使用UDP发送心跳到所有已配对设备
+            using var udpClient = new System.Net.Sockets.UdpClient();
+            foreach (var device in PairedDevices)
             {
-                try
+                if (device.IpAddresses is not null && device.IpAddresses.Count > 0)
                 {
-                    session.Send(bytes, 0, bytes.Length);
-                }
-                catch
-                {
-                    // best-effort heartbeat send
+                    foreach (var ipAddress in device.IpAddresses)
+                    {
+                        try
+                        {
+                            var endPoint = new IPEndPoint(IPAddress.Parse(ipAddress), udpPort);
+                            udpClient.Send(bytes, bytes.Length, endPoint);
+                        }
+                        catch
+                        {
+                            // best-effort UDP heartbeat send
+                        }
+                    }
                 }
             }
 

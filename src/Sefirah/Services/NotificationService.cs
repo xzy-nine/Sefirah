@@ -569,6 +569,9 @@ public class NotificationService(
             // 遍历所有设备的通知
             foreach (var (deviceId, notifications) in deviceNotifications)
             {
+                // 检查notifications是否为null
+                if (notifications == null) continue;
+                
                 totalNotifications += notifications.Count;
                 
                 // 遍历每个设备的通知

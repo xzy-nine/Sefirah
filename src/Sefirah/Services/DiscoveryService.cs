@@ -308,6 +308,31 @@ public class DiscoveryService(
         try
         {
             var message = Encoding.UTF8.GetString(buffer, (int)offset, (int)size);
+            
+            // 处理心跳消息
+            if (message.StartsWith("HEARTBEAT:"))
+            {
+                logger.LogDebug("收到 UDP 心跳消息: {message} 来自 {endpoint}");
+                
+                // 心跳格式：HEARTBEAT:<deviceUuid><设备电量%>
+                const string heartbeatPrefix = "HEARTBEAT:";
+                if (message.Length > heartbeatPrefix.Length + 36 && endpoint is IPEndPoint heartbeatIpEndPoint)
+                {
+                    // 提取设备UUID
+                    var deviceUuid = message.Substring(heartbeatPrefix.Length, 36);
+                    
+                    // 查找已配对的设备
+                    var device = deviceManager.PairedDevices.FirstOrDefault(d => d.Id == deviceUuid);
+                    if (device is not null)
+                    {
+                        // 直接调用NetworkService的ProcessProtocolMessageAsync方法处理心跳
+                        _ = networkService.ProcessProtocolMessageAsync(device, message);
+                    }
+                }
+                return;
+            }
+            
+            // 处理设备发现消息
             if (!message.StartsWith("NOTIFYRELAY_DISCOVER:")) return;
 
             var parts = message.Split(':');
