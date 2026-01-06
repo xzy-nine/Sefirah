@@ -396,7 +396,7 @@
                                                 FontSize="12"
                                                 Text="{x:Bind DeviceName, Mode=OneWay}" />
                                             
-                                            <!-- 媒体控制按钮（仍然使用页面级命令，命令作用于活动设备） -->
+                                            <!-- 媒体控制按钮 -->
                                             <StackPanel
                                                 Orientation="Horizontal"
                                                 Margin="0,10,0,0"
@@ -409,7 +409,7 @@
                                                     BorderBrush="Gray"
                                                     BorderThickness="1"
                                                     Command="{Binding DataContext.SendMediaControlCommand, ElementName=PageRoot}"
-                                                    CommandParameter="previous"
+                                                    CommandParameter="{x:Bind PreviousCommandParameter, Mode=OneWay}"
                                                     CornerRadius="18">
                                                     <FontIcon Glyph="&#xE76B;" />
                                                 </Button>
@@ -421,7 +421,7 @@
                                                     BorderBrush="Gray"
                                                     BorderThickness="1"
                                                     Command="{Binding DataContext.SendMediaControlCommand, ElementName=PageRoot}"
-                                                    CommandParameter="playPause"
+                                                    CommandParameter="{x:Bind PlayPauseCommandParameter, Mode=OneWay}"
                                                     CornerRadius="18">
                                                     <FontIcon Glyph="&#xE102;" />
                                                 </Button>
@@ -433,7 +433,7 @@
                                                     BorderBrush="Gray"
                                                     BorderThickness="1"
                                                     Command="{Binding DataContext.SendMediaControlCommand, ElementName=PageRoot}"
-                                                    CommandParameter="next"
+                                                    CommandParameter="{x:Bind NextCommandParameter, Mode=OneWay}"
                                                     CornerRadius="18">
                                                     <FontIcon Glyph="&#xE76C;" />
                                                 </Button>

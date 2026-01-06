@@ -171,15 +171,25 @@ public sealed partial class MainPageViewModel : BaseViewModel
     }
     
     [RelayCommand]
-    public void SendMediaControl(string action)
+    public void SendMediaControl(string mediaControlParam)
     {
-        if (Device == null)
+        if (string.IsNullOrEmpty(mediaControlParam))
         {
             return;
         }
         
-        // 发送媒体控制请求到当前设备
-        SessionManager.SendMediaControlRequest(Device.Id, action);
+        // 解析参数：格式为 "deviceId:action"
+        var parts = mediaControlParam.Split(':');
+        if (parts.Length != 2)
+        {
+            return;
+        }
+        
+        string deviceId = parts[0];
+        string action = parts[1];
+        
+        // 发送媒体控制请求到指定设备
+        SessionManager.SendMediaControlRequest(deviceId, action);
     }
 
     #endregion

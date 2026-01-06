@@ -36,7 +36,8 @@ public static class ImageHelper
             var bytes = new byte[stream.Size];
             await reader.LoadAsync((uint)stream.Size);
             reader.ReadBytes(bytes);
-            return Convert.ToBase64String(bytes);
+            // 返回完整的Data URL格式，包含'data:image/jpeg;base64,'前缀
+            return "data:image/jpeg;base64," + Convert.ToBase64String(bytes);
         }
         catch (Exception)
         {

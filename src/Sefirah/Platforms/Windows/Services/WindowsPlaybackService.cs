@@ -26,6 +26,8 @@ public class WindowsPlaybackService(
     private readonly MMDeviceEnumerator enumerator = new();
 
     private readonly Dictionary<string, double> lastTimelinePosition = [];
+    private readonly Dictionary<string, DateTime> lastSessionUpdateTime = [];
+    private const int MinUpdateIntervalMs = 5000; // 最小更新间隔，5秒
 
     /// <inheritdoc/>
     public async Task InitializeAsync()
@@ -73,7 +75,30 @@ public class WindowsPlaybackService(
 
     public async Task HandleMediaActionAsync(PlaybackAction mediaAction)
     {
+        // 尝试根据Source字段查找对应的媒体会话
         var session = activeSessions.Values.FirstOrDefault(s => s.SourceAppUserModelId == mediaAction.Source);
+        
+        // 如果找不到匹配的会话，或者Source是"MediaControl"（来自外部设备的控制指令），则使用当前活动的媒体会话
+        if (session == null || mediaAction.Source == "MediaControl")
+        {
+            session = manager?.GetCurrentSession();
+        }
+
+        // 检查是否是本应用自身的媒体会话，如果是则不执行控制指令
+        if (session != null)
+        {
+            // 获取当前进程的名称，用于识别本应用的媒体会话
+            string currentProcessName = System.Diagnostics.Process.GetCurrentProcess().ProcessName;
+            
+            // 检查媒体会话的SourceAppUserModelId是否包含当前进程名称
+            // 如果包含则认为是本应用自身的媒体会话，不执行控制指令
+            if (!string.IsNullOrEmpty(session.SourceAppUserModelId) && 
+                session.SourceAppUserModelId.Contains(currentProcessName, StringComparison.OrdinalIgnoreCase))
+            {
+                logger.LogDebug("忽略对本应用自身媒体会话的控制指令");
+                return;
+            }
+        }
 
         await ExecuteSessionActionAsync(session, mediaAction);
     }
@@ -87,7 +112,32 @@ public class WindowsPlaybackService(
                 switch (mediaAction.PlaybackActionType)
                 {
                     case PlaybackActionType.Play:
-                        await session?.TryPlayAsync();
+                        // 如果是来自外部设备的playPause指令（Source为"MediaControl"），则根据当前状态切换播放/暂停
+                        if (mediaAction.Source == "MediaControl")
+                        {
+                            var playbackInfo = session?.GetPlaybackInfo();
+                            if (playbackInfo != null)
+                            {
+                                if (playbackInfo.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing)
+                                {
+                                    await session?.TryPauseAsync();
+                                }
+                                else
+                                {
+                                    await session?.TryPlayAsync();
+                                }
+                            }
+                            else
+                            {
+                                // 如果无法获取播放状态，默认尝试播放
+                                await session?.TryPlayAsync();
+                            }
+                        }
+                        else
+                        {
+                            // 普通Play指令，直接播放
+                            await session?.TryPlayAsync();
+                        }
                         break;
                     case PlaybackActionType.Pause:
                         await session?.TryPauseAsync();
@@ -233,6 +283,8 @@ public class WindowsPlaybackService(
 
                 lastTimelinePosition[sender.SourceAppUserModelId] = currentPosition;
 
+                // 时间线变化时只发送位置信息，不发送完整媒体信息以减少网络流量
+                // 如果需要完整信息，会通过MediaPropertiesChanged事件发送
                 var message = new PlaybackSession
                 {
                     SessionType = SessionType.TimelineUpdate,
@@ -277,21 +329,12 @@ public class WindowsPlaybackService(
         }
     }
 
-    private void Session_PlaybackInfoChanged(GlobalSystemMediaTransportControlsSession sender, PlaybackInfoChangedEventArgs args)
+    private async void Session_PlaybackInfoChanged(GlobalSystemMediaTransportControlsSession sender, PlaybackInfoChangedEventArgs args)
     {
         try
         {
-            var playbackInfo = sender.GetPlaybackInfo();
-            var message = new PlaybackSession
-            {
-                SessionType = SessionType.PlaybackInfoUpdate,
-                Source = sender.SourceAppUserModelId,
-                IsPlaying = playbackInfo.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing,
-                PlaybackRate = playbackInfo.PlaybackRate,
-                IsShuffleActive = playbackInfo.IsShuffleActive,
-            };
-
-            SendPlaybackData(message);
+            // 播放状态变化时，获取完整的媒体信息
+            await UpdatePlaybackDataAsync(sender);
         }
         catch (Exception ex)
         {
@@ -360,12 +403,76 @@ public class WindowsPlaybackService(
     {
         try
         {
+            // 生成唯一键，用于区分不同会话的不同消息类型
+            string key = $"{playbackSession.Source}|{playbackSession.SessionType}";
+            
+            // 检查是否需要节流
+            if (lastSessionUpdateTime.TryGetValue(key, out var lastTime))
+            {
+                var elapsed = DateTime.Now - lastTime;
+                if (elapsed.TotalMilliseconds < MinUpdateIntervalMs)
+                {
+                    // 发送频率过高，跳过本次发送
+                    return;
+                }
+            }
+            
+            // 更新最后发送时间
+            lastSessionUpdateTime[key] = DateTime.Now;
+            
+            // 获取NetworkService，用于发送与Android兼容的媒体会话
+            var networkService = Ioc.Default.GetRequiredService<INetworkService>();
+            
             foreach (var device in deviceManager.PairedDevices)
             {
                 if (device.ConnectionStatus && device.DeviceSettings.MediaSessionSyncEnabled)
                 {
-                    string jsonMessage = SocketMessageSerializer.Serialize(playbackSession);
-                    sessionManager.SendMessage(device.Id, jsonMessage);
+                    // 对于Session类型的消息，转换为与Android兼容的媒体会话格式
+                    if (playbackSession.SessionType == SessionType.Session || playbackSession.SessionType == SessionType.PlaybackInfoUpdate)
+                    {
+                        // 修复appName提取逻辑：如果Source是"QQMusic.exe"，则整个作为appName
+                        string appName = playbackSession.Source ?? "Unknown App";
+                        
+                        // 构造与Android兼容的NotificationMessage
+                        // 确保文本格式正确，避免出现空值导致的不完整文本
+                        string title = playbackSession.TrackTitle ?? string.Empty;
+                        string artist = playbackSession.Artist ?? string.Empty;
+                        string text = string.Empty;
+                        
+                        if (!string.IsNullOrEmpty(title) && !string.IsNullOrEmpty(artist))
+                        {
+                            text = $"{artist} - {title}";
+                        }
+                        else if (!string.IsNullOrEmpty(title))
+                        {
+                            text = title;
+                        }
+                        else if (!string.IsNullOrEmpty(artist))
+                        {
+                            text = artist;
+                        }
+                        
+                        var notificationMessage = new NotificationMessage
+                        {
+                            NotificationKey = Guid.NewGuid().ToString(),
+                            TimeStamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString(),
+                            NotificationType = NotificationType.New,
+                            AppPackage = playbackSession.Source,
+                            AppName = appName,
+                            Title = title,
+                            Text = text,
+                            CoverUrl = playbackSession.Thumbnail,
+                        };
+                        
+                        // 使用NetworkService发送与Android兼容的媒体会话
+                        networkService.SendMediaPlayNotification(device.Id, notificationMessage);
+                    }
+                    else
+                    {
+                        // 其他类型的消息（如TimelineUpdate）继续使用原有的JSON格式
+                        string jsonMessage = SocketMessageSerializer.Serialize(playbackSession);
+                        sessionManager.SendMessage(device.Id, jsonMessage);
+                    }
                 }
             }
         }

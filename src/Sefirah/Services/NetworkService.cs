@@ -233,7 +233,10 @@ public class NetworkService(
                     logger.LogDebug("连接成功");
                     
                     using var networkStream = tcpClient.GetStream();
+                    // 发送消息
                     await networkStream.WriteAsync(messageBytes, 0, messageBytes.Length);
+                    // 确保数据完全发送
+                    await networkStream.FlushAsync();
                     logger.LogInformation("成功发送请求：{description}，deviceId={deviceId}", description, deviceId);
                     
                     // 关闭连接
@@ -245,12 +248,12 @@ public class NetworkService(
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "发送请求时出错：deviceId={deviceId}", deviceId);
+                    logger.LogError(ex, "发送请求时出错：deviceId={deviceId}, 异常类型：{exceptionType}, 异常消息：{message}", deviceId, ex.GetType().Name, ex.Message);
                 }
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "发送请求时出错：deviceId={deviceId}", deviceId);
+                logger.LogError(ex, "发送请求时出错：deviceId={deviceId}, 异常类型：{exceptionType}, 异常消息：{message}", deviceId, ex.GetType().Name, ex.Message);
             }
             finally
             {
@@ -266,19 +269,46 @@ public class NetworkService(
     /// <param name="controlType">控制类型（如 play, pause, next 等）</param>
     public void SendMediaControlRequest(string deviceId, string controlType)
     {
-        // 构建媒体控制请求对象
+        // 构建媒体控制请求对象，与 Android 端保持一致（移除time字段）
         var requestObj = new
         {
             type = "MEDIA_CONTROL",
-            action = controlType,
-            time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+            action = controlType
         };
         
         // 序列化为 JSON
         string requestJson = JsonSerializer.Serialize(requestObj);
         
-        // 调用通用发送方法
+        // 调用通用发送方法，使用 DATA_MEDIA_CONTROL 协议头，与 Android 端保持一致
         SendRequest(deviceId, "DATA_MEDIA_CONTROL", requestJson, $"媒体控制请求，controlType={controlType}");
+    }
+    
+    /// <summary>
+    /// 发送媒体播放通知
+    /// </summary>
+    /// <param name="deviceId">设备 ID</param>
+    /// <param name="mediaInfo">媒体播放信息</param>
+    public void SendMediaPlayNotification(string deviceId, NotificationMessage mediaInfo)
+    {
+        // 构建媒体播放通知对象，与 Android 端保持一致
+        var requestObj = new
+        {
+            type = "MEDIA_PLAY",
+            packageName = mediaInfo.AppPackage,
+            appName = mediaInfo.AppName,
+            title = mediaInfo.Title,
+            text = mediaInfo.Text,
+            coverUrl = mediaInfo.CoverUrl,
+            time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            isLocked = false, // Android端需要的字段，默认设为false
+            mediaType = "FULL" // Android端需要的字段，PC端发送全量包
+        };
+        
+        // 序列化为 JSON
+        string requestJson = JsonSerializer.Serialize(requestObj);
+        
+        // 调用通用发送方法，使用 DATA_MEDIAPLAY 协议头，与 Android 端保持一致
+        SendRequest(deviceId, "DATA_MEDIAPLAY", requestJson, "媒体播放通知");
     }
 
     public void SendMessage(string deviceId, string message)
@@ -1013,8 +1043,28 @@ public class NetworkService(
                     case "playPause":
                     case "next":
                     case "previous":
-                        // 这些动作由客户端直接处理，不需要PC端执行
-                        logger.LogDebug("忽略媒体控制动作：{action}");
+                        // 执行媒体控制动作
+                        logger.LogDebug("执行媒体控制动作：{action}");
+                        try
+                        {
+                            var playbackService = Ioc.Default.GetRequiredService<IPlaybackService>();
+                            PlaybackActionType actionType = action switch
+                            {
+                                "playPause" => PlaybackActionType.Play,
+                                "next" => PlaybackActionType.Next,
+                                "previous" => PlaybackActionType.Previous,
+                                _ => PlaybackActionType.Play
+                            };
+                            await playbackService.HandleMediaActionAsync(new PlaybackAction
+                            {
+                                PlaybackActionType = actionType,
+                                Source = "MediaControl"
+                            });
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogError(ex, "执行媒体控制动作时出错：{action}", action);
+                        }
                         break;
                         
                     case "audioRequest":
@@ -1036,7 +1086,7 @@ public class NetworkService(
                                 result = success ? "accepted" : "rejected"
                             };
                             string responseJson = JsonSerializer.Serialize(response);
-                            // 发送响应
+                            // 发送响应，使用 DATA_MEDIA_CONTROL 协议头
                             SendRequest(device.Id, "DATA_MEDIA_CONTROL", responseJson, "音频转发响应");
                             
                             logger.LogDebug("音频转发请求处理完成，结果：{result}", success ? "accepted" : "rejected");
@@ -1045,7 +1095,7 @@ public class NetworkService(
                         {
                             logger.LogError(ex, "处理音频转发请求时出错");
                             
-                            // 发送拒绝响应
+                            // 发送拒绝响应，使用 DATA_MEDIA_CONTROL 协议头
                             var errorResponse = new
                             {
                                 type = "MEDIA_CONTROL",

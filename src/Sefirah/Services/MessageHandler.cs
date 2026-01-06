@@ -358,8 +358,7 @@ public class MessageHandler(
                     await HandleAudioRequestAsync(device, root);
                     break;
                 case "playPause":
-                    // PlaybackActionType 中没有 PlayPause，需要分别处理
-                    // 这里简化处理，直接调用 Play
+                    // 直接调用 Play 操作，与 Android 端保持一致
                     await playbackService.HandleMediaActionAsync(new PlaybackAction 
                     { 
                         PlaybackActionType = PlaybackActionType.Play, 

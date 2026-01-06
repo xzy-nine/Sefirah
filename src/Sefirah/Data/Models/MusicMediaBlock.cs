@@ -107,6 +107,21 @@ public class MusicMediaBlock : INotifyPropertyChanged
             OnPropertyChanged();
         }
     }
+    
+    /// <summary>
+    /// 前一首命令参数
+    /// </summary>
+    public string PreviousCommandParameter => $"{DeviceId}:previous";
+    
+    /// <summary>
+    /// 播放/暂停命令参数
+    /// </summary>
+    public string PlayPauseCommandParameter => $"{DeviceId}:playPause";
+    
+    /// <summary>
+    /// 下一首命令参数
+    /// </summary>
+    public string NextCommandParameter => $"{DeviceId}:next";
 
     /// <summary>
     /// 构造函数
