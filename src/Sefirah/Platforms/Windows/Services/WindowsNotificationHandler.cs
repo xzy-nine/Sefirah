@@ -81,8 +81,7 @@ public class WindowsNotificationHandler(ILogger logger, ISessionManager sessionM
             {
                 var iconUri = await IconUtils.GetAppIconUriAsync(message.AppPackage);
                 var appIconExists = IconUtils.AppIconExists(message.AppPackage);
-                logger.LogDebug("通知 {NotificationKey}: 包名={AppPackage}, GetAppIconUriAsync 返回 {IconUri}, AppIconExists={Exists}",
-                    message.NotificationKey, message.AppPackage, iconUri?.ToString() ?? "<null>", appIconExists);
+                
 
                 if (iconUri is not null)
                 {
@@ -108,7 +107,7 @@ public class WindowsNotificationHandler(ILogger logger, ISessionManager sessionM
 
                                 // 使用 file:// URI 引用临时图标文件
                                 var fileUri = new Uri($"file://{tempFilePath}");
-                                logger.LogDebug("复制本地图标到临时目录并设置：通知键={NotificationKey}，临时路径={TempFilePath}", message.NotificationKey, tempFilePath);
+
                                 builder.SetAppLogoOverride(fileUri, AppNotificationImageCrop.Circle);
                             }
                             catch (Exception exLocal)

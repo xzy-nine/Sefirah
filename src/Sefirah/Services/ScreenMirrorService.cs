@@ -477,7 +477,45 @@ public class ScreenMirrorService(
 
     private (string, string) BuildScrcpyArguments(List<string> args, string deviceSerial, IDeviceSettingsService settings)
     {
+        // Check if this is audio-only mode (either from settings or custom args)
+        var isAudioOnlyMode = settings.DisableVideoForwarding || args.Any(arg => arg.Contains("--no-video"));
+        
+        if (isAudioOnlyMode)
+        {
+            // For audio-only mode, build minimal command
+            // Note: Audio is enabled by default, so we don't need to add --audio explicitly
+            var audioOnlyArgs = new List<string>
+            {
+                $"-s {deviceSerial}",
+                "--no-video",
+                "--audio-source=playback",
+                "--audio-dup"
+            };
+            
+            // Add optional audio settings
+            if (!string.IsNullOrEmpty(settings.AudioBitrate))
+            {
+                audioOnlyArgs.Add($"--audio-bit-rate={settings.AudioBitrate}");
+            }
 
+            if (!string.IsNullOrEmpty(settings.AudioBuffer))
+            {
+                audioOnlyArgs.Add($"--audio-buffer={settings.AudioBuffer}");
+            }
+
+            if (!string.IsNullOrEmpty(settings.AudioOutputBuffer))
+            {
+                audioOnlyArgs.Add($"--audio-output-buffer={settings.AudioOutputBuffer}");
+            }
+            
+            // Join and log the final command for debugging
+            var finalArgs = string.Join(" ", audioOnlyArgs);
+            logger.LogDebug("[调试] 仅音频模式 scrcpy 命令：{FinalArgs}", finalArgs);
+            
+            return (finalArgs, deviceSerial);
+        }
+        
+        // Normal mode - use all settings
         var preDefinedArgs = settings.CustomArguments;
 
         if (!string.IsNullOrEmpty(preDefinedArgs))
@@ -497,11 +535,6 @@ public class ScreenMirrorService(
         }
         
         // Video settings
-        if (settings.DisableVideoForwarding)
-        {
-            args.Add("--no-video");
-        }
-
         if (settings.VideoCodec != 0)
         {
             args.Add($"{adbService.VideoCodecOptions[settings.VideoCodec].Command}");
