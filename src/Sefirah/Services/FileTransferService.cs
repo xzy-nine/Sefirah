@@ -27,7 +27,7 @@ public class FileTransferService(
     private FileMetadata? currentFileMetadata;
     private long bytesTransferred = 0;
     private Client? client;
-    private Server? server;
+    private Sefirah.Services.Socket.SslServer? server;
     private ServerInfo? serverInfo;
     private ServerSession? session;
     private uint notificationSequence = 1;
@@ -588,7 +588,7 @@ public class FileTransferService(
         {
             try
             {
-                server = new Server(IPAddress.Any, port, this, logger)
+                server = new Sefirah.Services.Socket.SslServer(context, IPAddress.Any, port, this, logger)
                 {
                     OptionDualMode = true,
                     OptionReuseAddress = true,

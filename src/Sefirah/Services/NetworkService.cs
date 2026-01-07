@@ -28,9 +28,11 @@ public class NetworkService(
     IAdbService adbService,
     IScreenMirrorService screenMirrorService) : INetworkService, ISessionManager, ITcpServerProvider
 {
-    private Server? server;
-    public int ServerPort { get; private set; } = 23333;
+    private Sefirah.Services.Socket.TcpServer? server;
+    public int ServerPort { get; private set; }
     private bool isRunning;
+    private X509Certificate2? certificate;
+    private readonly IEnumerable<int> PORT_RANGE = Enumerable.Range(23333, 1); // Only use port 23333
 
     private readonly Lazy<IMessageHandler> messageHandler = new(messageHandlerFactory);
     private readonly ConcurrentDictionary<Guid, string> sessionBuffers = new();
@@ -59,123 +61,8 @@ public class NetworkService(
         }
         try
         {
-            var localDevice = await deviceManager.GetLocalDeviceAsync();
-            localPublicKey = Encoding.UTF8.GetString(localDevice.PublicKey ?? Array.Empty<byte>());
-            localDeviceId = localDevice.DeviceId;
-
-            server = new Server(IPAddress.Any, ServerPort, this, logger)
-            {
-                OptionReuseAddress = true,
-            };
-
-            if (server.Start())
-            {
-                isRunning = true;
-                logger.Info($"服务器已在端口 {ServerPort} 启动");
-                StartHeartbeat();
-                return true;
-            }
-
-            server.Dispose();
-            server = null;
-
-            logger.LogError("启动服务器失败");
-            return false;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError("启动服务器时发生错误：{ex}", ex);
-            return false;
-        }
-    }
-
-    /// <summary>
-    /// 发送应用列表请求
-    /// </summary>
-    /// <param name="deviceId">设备 ID</param>
-    public void SendAppListRequest(string deviceId)
-    {
-        // 构建应用列表请求对象
-        var requestObj = new
-        {
-            type = "APP_LIST_REQUEST",
-            scope = "user",
-            time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-        };
-        
-        // 序列化为 JSON
-        string requestJson = JsonSerializer.Serialize(requestObj);
-        
-        // 调用通用发送方法
-        SendRequest(deviceId, "DATA_APP_LIST_REQUEST", requestJson, "应用列表请求");
-    }
-    
-    /// <summary>
-    /// 发送图标请求
-    /// </summary>
-    /// <param name="deviceId">设备 ID</param>
-    /// <param name="packageNames">应用包名列表</param>
-    public void SendIconRequest(string deviceId, List<string> packageNames)
-    {
-        logger.LogInformation("开始发送图标请求：deviceId={deviceId}, packageCount={packageCount}", deviceId, packageNames.Count);
-
-        // 处理mediaplay:前缀，移除前缀后再发送请求
-        var processedPackageNames = packageNames.Select(packageName => 
-            packageName.StartsWith("mediaplay:") ? packageName.Substring("mediaplay:".Length) : packageName
-        ).ToList();
-        
-        // 构建图标请求对象（支持单个或多个包名）
-        object requestObj;
-        if (processedPackageNames.Count == 1)
-        {
-            requestObj = new
-            {
-                type = "ICON_REQUEST",
-                packageName = processedPackageNames.First(),
-                time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-            };
-        }
-        else
-        {
-            requestObj = new
-            {
-                type = "ICON_REQUEST",
-                packageNames = processedPackageNames,
-                time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-            };
-        }
-        
-        // 序列化为 JSON
-        string requestJson = JsonSerializer.Serialize(requestObj);
-        
-        // 调用通用发送方法
-        SendRequest(deviceId, "DATA_ICON_REQUEST", requestJson, $"图标请求，packageCount={packageNames.Count}");
-    }
-    
-    /// <summary>
-    /// 发送图标请求（单个包名）
-    /// </summary>
-    /// <param name="deviceId">设备 ID</param>
-    /// <param name="packageName">应用包名</param>
-    public void SendIconRequest(string deviceId, string packageName)
-    {
-        SendIconRequest(deviceId, new List<string> { packageName });
-    }
-
-    /// <summary>
-    /// 通用发送请求方法
-    /// </summary>
-    /// <param name="deviceId">设备 ID</param>
-    /// <param name="messageType">消息类型（如 DATA_APP_LIST_REQUEST, DATA_ICON_REQUEST, DATA_MEDIA_CONTROL 等）</param>
-    /// <param name="requestJson">请求内容的 JSON 字符串</param>
-    /// <param name="description">请求描述，用于日志</param>
-    private void SendRequest(string deviceId, string messageType, string requestJson, string description)
-    {
-        logger.LogInformation("开始发送请求：{description}，deviceId={deviceId}", description, deviceId);
-        
-        _ = Task.Run(async () =>
-        {
-            try
+            // Notify-Relay-pc不使用SSL，直接使用普通TCP连接
+            foreach (int port in PORT_RANGE)
             {
                 var device = PairedDevices.FirstOrDefault(d => d.Id == deviceId);
                 if (device is null)
@@ -217,39 +104,30 @@ public class NetworkService(
                 
                 try
                 {
-                    logger.LogDebug("开始加密消息");
-                    var encryptedPayload = NotifyCryptoHelper.Encrypt(requestJson, device.SharedSecret);
-                    logger.LogDebug("消息加密成功，长度={length}", encryptedPayload.Length);
-                    
-                    var framedMessage = $"{messageType}:{localDeviceId}:{localPublicKey}:{encryptedPayload}\n";
-                    logger.LogDebug("构建的完整消息：{framedMessage}", framedMessage.Length > 100 ? framedMessage[..100] + "..." : framedMessage);
-                    
-                    byte[] messageBytes = Encoding.UTF8.GetBytes(framedMessage);
-                    logger.LogDebug("消息字节长度：{length}", messageBytes.Length);
+                    // 使用新的TcpServer类，不使用SSL
+                    server = new Sefirah.Services.Socket.TcpServer(IPAddress.Any, port, this, logger)
+                    {
+                        OptionReuseAddress = true,
+                    };
 
-                    // 使用TCP客户端主动连接并发送消息
-                    using var tcpClient = new System.Net.Sockets.TcpClient();
-                    logger.LogDebug("正在连接到设备：{ipAddress}:{port}", ipAddress, notifyRelayPort);
-                    await tcpClient.ConnectAsync(ipAddress, notifyRelayPort);
-                    logger.LogDebug("连接成功");
-                    
-                    using var networkStream = tcpClient.GetStream();
-                    // 发送消息
-                    await networkStream.WriteAsync(messageBytes, 0, messageBytes.Length);
-                    // 确保数据完全发送
-                    await networkStream.FlushAsync();
-                    logger.LogInformation("成功发送请求：{description}，deviceId={deviceId}", description, deviceId);
-                    
-                    // 关闭连接
-                    tcpClient.Close();
-                }
-                catch (ObjectDisposedException ex)
-                {
-                    logger.LogError(ex, "发送请求时 Socket 已释放：deviceId={deviceId}", deviceId);
+                    if (server.Start())
+                    {
+                        ServerPort = port;
+                        isRunning = true;
+                        logger.LogInformation("Server started on port: {port}", port);
+                        return true;
+                    }
+                    else
+                    {
+                        server.Dispose();
+                        server = null;
+                    }
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "发送请求时出错：deviceId={deviceId}, 异常类型：{exceptionType}, 异常消息：{message}", deviceId, ex.GetType().Name, ex.Message);
+                    logger.LogError(ex, "Error starting server on port {port}", port);
+                    server?.Dispose();
+                    server = null;
                 }
             }
             catch (Exception ex)
@@ -353,11 +231,11 @@ public class NetworkService(
     {
         try
         {
-            var targets = GetConnectedDeviceIds();
-            foreach (var deviceId in targets)
-            {
-                SendMessage(deviceId, message);
-            }
+            string messageWithNewline = message + "\n";
+            byte[] messageBytes = Encoding.UTF8.GetBytes(messageWithNewline);
+
+            // 直接调用ServerSession的Send方法，内部会处理不同类型的会话
+            session.Send(messageBytes, 0, messageBytes.Length);
         }
         catch (Exception ex)
         {
@@ -486,10 +364,7 @@ public class NetworkService(
         {
             string newData = Encoding.UTF8.GetString(buffer, (int)offset, (int)size);
 
-            if (!sessionBuffers.TryGetValue(session.Id, out var bufferedData))
-            {
-                bufferedData = string.Empty;
-            }
+            logger.LogDebug("Processing message: {message}", newData.Length > 100 ? string.Concat(newData.AsSpan(0, Math.Min(100, newData.Length)), "...") : newData);
 
             bufferedData += newData;
             while (true)
@@ -681,489 +556,209 @@ public class NetworkService(
     {
         try
         {
-            var parts = message.Split(':');
-            if (parts.Length < 4)
+            // 处理Notify-Relay-pc格式的HANDSHAKE消息：HANDSHAKE:{uuid}:{localPublicKey}
+            if (message.StartsWith("HANDSHAKE:"))
             {
-                logger.LogWarning("无效的 DATA 帧格式: {message}", message.Length > 50 ? message[..50] + "..." : message);
-                return;
-            }
-
-            if (device.SharedSecret is null)
-            {
-                logger.LogWarning("设备 {id} 缺少共享密钥，无法处理加密消息", device.Id);
-                return;
-            }
-
-            var messageType = parts[0];
-            var encryptedPayload = string.Join(":", parts.Skip(3));
-            var decryptedPayload = NotifyCryptoHelper.Decrypt(encryptedPayload, device.SharedSecret);
-            
-            // 更新设备活跃时间
-            MarkDeviceAlive(device);
-            
-            // 根据具体的DATA_*报文头进行分流处理
-            switch (messageType)
-            {
-                case "DATA_APP_LIST_REQUEST":
-                    // 应用列表请求
-                    await HandleAppListRequestAsync(device, decryptedPayload);
-                    break;
-                    
-                case "DATA_ICON_REQUEST":
-                    // 图标请求
-                    await HandleIconRequestAsync(device, decryptedPayload);
-                    break;
-                    
-                case "DATA_NOTIFICATION":
-                case "DATA_JSON":
-                    // 普通通知和通用JSON数据
-                    await DispatchPayloadAsync(device, decryptedPayload);
-                    break;
-                    
-                case "DATA_MEDIAPLAY":
-                    // 媒体播放信息，直接调用媒体播放通知处理
-                    logger.LogTrace("收到DATA_MEDIAPLAY消息，设备：{deviceId}", device.Id);
-                    // logger.LogDebug("DATA_MEDIAPLAY消息内容：{payload}", decryptedPayload.Length > 100 ? decryptedPayload[..100] + "..." : decryptedPayload);
-                    try
-                    {
-                        // 直接使用JsonDocument解析DATA_MEDIAPLAY消息
-                        using JsonDocument doc = JsonDocument.Parse(decryptedPayload);
-                        JsonElement root = doc.RootElement;
-                        
-                        // 提取time字段，处理Number和String两种类型
-                        string timeStamp;
-                        if (root.TryGetProperty("time", out JsonElement timeElement))
-                        {
-                            if (timeElement.ValueKind == JsonValueKind.String)
-                            {
-                                timeStamp = timeElement.GetString() ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
-                            }
-                            else if (timeElement.ValueKind == JsonValueKind.Number)
-                            {
-                                timeStamp = timeElement.GetInt64().ToString();
-                            }
-                            else
-                            {
-                                timeStamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
-                            }
-                        }
-                        else if (root.TryGetProperty("timeStamp", out JsonElement timeStampElement))
-                        {
-                            if (timeStampElement.ValueKind == JsonValueKind.String)
-                            {
-                                timeStamp = timeStampElement.GetString() ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
-                            }
-                            else if (timeStampElement.ValueKind == JsonValueKind.Number)
-                            {
-                                timeStamp = timeStampElement.GetInt64().ToString();
-                            }
-                            else
-                            {
-                                timeStamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
-                            }
-                        }
-                        else
-                        {
-                            timeStamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
-                        }
-                        
-                        // 直接构造NotificationMessage对象
-                        var notificationMessage = new NotificationMessage
-                        {
-                            NotificationKey = Guid.NewGuid().ToString(),
-                            TimeStamp = timeStamp,
-                            NotificationType = NotificationType.New,
-                            AppPackage = root.TryGetProperty("packageName", out JsonElement packageNameElement) && packageNameElement.ValueKind == JsonValueKind.String ? packageNameElement.GetString() : null,
-                            AppName = root.TryGetProperty("appName", out JsonElement appNameElement) && appNameElement.ValueKind == JsonValueKind.String ? appNameElement.GetString() : null,
-                            Title = root.TryGetProperty("title", out JsonElement titleElement) && titleElement.ValueKind == JsonValueKind.String ? titleElement.GetString() : null,
-                            Text = root.TryGetProperty("text", out JsonElement textElement) && textElement.ValueKind == JsonValueKind.String ? textElement.GetString() : null,
-                            BigPicture = root.TryGetProperty("bigPicture", out JsonElement bigPictureElement) && bigPictureElement.ValueKind == JsonValueKind.String ? bigPictureElement.GetString() : null,
-                            LargeIcon = root.TryGetProperty("largeIcon", out JsonElement largeIconElement) && largeIconElement.ValueKind == JsonValueKind.String ? largeIconElement.GetString() : null,
-                            CoverUrl = root.TryGetProperty("coverUrl", out JsonElement coverUrlElement) && coverUrlElement.ValueKind == JsonValueKind.String ? coverUrlElement.GetString() : null
-                        };
-                        
-                        // logger.LogDebug("成功构造NotificationMessage对象");
-                        var notificationService = Ioc.Default.GetRequiredService<INotificationService>();
-                        // logger.LogDebug("调用HandleMediaPlayNotification处理媒体播放通知");
-                        await notificationService.HandleMediaPlayNotification(device, notificationMessage);
-                        // logger.LogDebug("媒体播放通知处理完成");
-                    }
-                    catch (JsonException jsonEx)
-                    {
-                        logger.LogError(jsonEx, "解析DATA_MEDIAPLAY消息JSON时出错，消息内容：{payload}", decryptedPayload.Length > 100 ? decryptedPayload[..100] + "..." : decryptedPayload);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "处理DATA_MEDIAPLAY消息时出错");
-                    }
-                    break;
-                    
-                case "DATA_APP_LIST_RESPONSE":
-                case "DATA_ICON_RESPONSE":
-                case "DATA_AUDIO_REQUEST":
-                    // 应用列表响应、图标响应和音频请求
-                    await DispatchPayloadAsync(device, decryptedPayload);
-                    break;
-                    
-                case "DATA_SUPERISLAND":
-                    // 超级岛通知，直接忽略
-                    break;
-                    
-                case "DATA_MEDIA_CONTROL":
-                    // 媒体控制指令
-                    await DispatchPayloadAsync(device, decryptedPayload);
-                    break;
-                    
-                default:
-                    logger.LogWarning("不支持的 DATA 消息类型: {messageType}", messageType);
-                    break;
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "处理DATA消息时出错");
-        }
-    }
-
-    private async Task HandleAppListRequestAsync(PairedDevice device, string decryptedPayload)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(decryptedPayload);
-            var root = doc.RootElement;
-            
-            // 检查是否为 APP_LIST_REQUEST
-            if (root.TryGetProperty("type", out var typeProp) && typeProp.GetString() == "APP_LIST_REQUEST")
-            {
-                // 获取设备会话
-                if (TryGetSession(device.Id, out var session) && session?.Socket?.Connected == true)
+                var parts = message.Split(':');
+                if (parts.Length < 3)
                 {
-                    // 获取应用列表（目前返回空列表，实际实现需要采集本机应用）
-                    var apps = new List<object>();
-                    
-                    // 构建响应对象
-                    var responseObj = new
-                    {
-                        type = "APP_LIST_RESPONSE",
-                        scope = "user",
-                        apps = apps,
-                        total = apps.Count,
-                        time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-                    };
-                    
-                    string respJson = JsonSerializer.Serialize(responseObj);
-                    string encryptedResp = NotifyCryptoHelper.Encrypt(respJson, device.SharedSecret);
-                    string payload = $"DATA_APP_LIST_RESPONSE:{localDeviceId}:{localPublicKey}:{encryptedResp}";
-                    byte[] payloadBytes = Encoding.UTF8.GetBytes(payload + "\n");
-                    
-                    session.Send(payloadBytes, 0, payloadBytes.Length);
-                    logger.LogDebug("已发送 APP_LIST_RESPONSE 给设备 {deviceId}", device.Id);
+                    logger.LogWarning("Invalid HANDSHAKE message format: {message}", message);
+                    SendMessage(session, $"REJECT:{string.Empty}");
+                    DisconnectSession(session);
+                    return;
                 }
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "处理应用列表请求时出错");
-        }
-    }
-
-    private async Task HandleIconRequestAsync(PairedDevice device, string decryptedPayload)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(decryptedPayload);
-            var root = doc.RootElement;
-            
-            // 检查是否为 ICON_REQUEST
-            if (root.TryGetProperty("type", out var typeProp) && typeProp.GetString() == "ICON_REQUEST")
-            {
-                // 获取设备会话
-                if (TryGetSession(device.Id, out var session) && session?.Socket?.Connected == true)
+                
+                string remoteUuid = parts[1];
+                string remotePublicKey = parts[2];
+                
+                var connectedSessionIpAddress = session.Socket.RemoteEndPoint?.ToString()?.Split(':')[0];
+                logger.LogInformation("Received HANDSHAKE from {connectedSessionIpAddress}, UUID: {remoteUuid}", connectedSessionIpAddress, remoteUuid);
+                
+                var localDevice = await deviceManager.GetLocalDeviceAsync();
+                string localPublicKeyBase64 = Convert.ToBase64String(localDevice.PublicKey);
+                
+                // 检查设备是否已经被拒绝
+                bool isRejected = false; // TODO这里需要实现拒绝列表逻辑
+                
+                if (isRejected)
                 {
-                    // 获取包名
-                    string packageName = root.TryGetProperty("packageName", out var packageProp) ? packageProp.GetString() : string.Empty;
-                    if (string.IsNullOrEmpty(packageName))
-                    {
-                        logger.LogWarning("图标请求缺少 packageName");
-                        return;
-                    }
-                    
-                    // 构建响应对象（目前返回空图标，实际实现需要获取应用图标）
-                    var responseObj = new
-                    {
-                        type = "ICON_RESPONSE",
-                        packageName = packageName,
-                        iconData = string.Empty,
-                        time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-                    };
-                    
-                    string respJson = JsonSerializer.Serialize(responseObj);
-                    string encryptedResp = NotifyCryptoHelper.Encrypt(respJson, device.SharedSecret);
-                    string payload = $"DATA_ICON_RESPONSE:{localDeviceId}:{localPublicKey}:{encryptedResp}";
-                    byte[] payloadBytes = Encoding.UTF8.GetBytes(payload + "\n");
-                    
-                    session.Send(payloadBytes, 0, payloadBytes.Length);
-                    logger.LogDebug("已发送 ICON_RESPONSE 给设备 {deviceId}，包名: {packageName}", device.Id, packageName);
+                    logger.LogWarning("Device {remoteUuid} is in rejected list", remoteUuid);
+                    SendMessage(session, $"REJECT:{remoteUuid}");
+                    DisconnectSession(session);
+                    return;
                 }
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "处理图标请求时出错");
-        }
-    }
-
-    private async Task<PairedDevice?> TryAttachExistingDeviceSessionAsync(ServerSession session, string message)
-    {
-        try
-        {
-            string remoteDeviceId;
-            string remotePublicKey = string.Empty;
-            
-            if (message.StartsWith("HEARTBEAT:"))
-            {
-                // 处理新的心跳格式：HEARTBEAT:<deviceUuid><设备电量%>
-                const string heartbeatPrefix = "HEARTBEAT:";
-                if (message.Length > heartbeatPrefix.Length + 36)
+                
+                // 检查设备是否已经存在
+                var existingDevice = PairedDevices.FirstOrDefault(d => d.Id == remoteUuid);
+                
+                // 自动信任条件：设备已存在且具有已保存的publicKey（匹配远端公钥）
+                bool canAutoTrust = existingDevice != null && !string.IsNullOrEmpty(existingDevice.PublicKey) && 
+                                   string.Equals(existingDevice.PublicKey, remotePublicKey, StringComparison.OrdinalIgnoreCase);
+                
+                if (existingDevice != null && existingDevice.IsAuthenticated)
                 {
-                    remoteDeviceId = message.Substring(heartbeatPrefix.Length, 36);
+                    // 已认证设备，直接接受
+                    logger.LogInformation("Device {remoteUuid} is already authenticated, accepting connection", remoteUuid);
+                    SendMessage(session, $"ACCEPT:{localDevice.DeviceId}:{localPublicKeyBase64}");
+                    
+                    // 更新设备信息
+                    existingDevice.ConnectionStatus = true;
+                    existingDevice.Session = session;
+                    existingDevice.IsOnline = true;
+                    existingDevice.LastSeen = DateTimeOffset.UtcNow;
+                    
+                    deviceManager.ActiveDevice = existingDevice;
+                    ConnectionStatusChanged?.Invoke(this, (existingDevice, true));
+                    return;
+                }
+                else if (canAutoTrust)
+                {
+                    // 自动信任复连
+                    logger.LogInformation("Auto-trusting device {remoteUuid} based on existing public key", remoteUuid);
+                    SendMessage(session, $"ACCEPT:{localDevice.DeviceId}:{localPublicKeyBase64}");
+                    
+                    // 更新设备信息
+                    existingDevice!.PublicKey = remotePublicKey;
+                    existingDevice.ConnectionStatus = true;
+                    existingDevice.Session = session;
+                    existingDevice.IsAuthenticated = true;
+                    existingDevice.IsOnline = true;
+                    existingDevice.LastSeen = DateTimeOffset.UtcNow;
+                    
+                    // 生成共享密钥，使用Notify-Relay-pc的HKDF-SHA256算法
+                    string localPublicKeyStr = Convert.ToBase64String(localDevice.PublicKey);
+                    string sharedSecretBase64 = CryptoService.GenerateSharedSecret(localPublicKeyStr, remotePublicKey);
+                    existingDevice.SharedSecret = Convert.FromBase64String(sharedSecretBase64);
+                    
+                    deviceManager.ActiveDevice = existingDevice;
+                    ConnectionStatusChanged?.Invoke(this, (existingDevice, true));
+                    return;
                 }
                 else
                 {
-                    return null;
-                }
-            }
-            else
-            {
-                // 处理其他格式
-                var parts = message.Split(':');
-                if (parts.Length < 3) return null;
-                remoteDeviceId = parts[1];
-                remotePublicKey = parts[2];
-            }
-
-            var device = PairedDevices.FirstOrDefault(d => d.Id == remoteDeviceId);
-            if (device is null) return null;
-
-            if (device.RemotePublicKey is not null && !string.Equals(device.RemotePublicKey, remotePublicKey, StringComparison.Ordinal))
-            {
-                logger.LogWarning("设备 {id} 的远端公钥不匹配", remoteDeviceId);
-                return null;
-            }
-
-            if (localPublicKey is null)
-            {
-                logger.LogWarning("本地公钥未初始化，无法绑定会话");
-                return null;
-            }
-
-            await App.MainWindow.DispatcherQueue.EnqueueAsync(() =>
-            {
-                device.Session = session;
-                device.ConnectionStatus = true;
-                device.RemotePublicKey = remotePublicKey;
-                device.SharedSecret ??= NotifyCryptoHelper.GenerateSharedSecretBytes(localPublicKey, remotePublicKey);
-                device.LastHeartbeat = DateTime.UtcNow;
-                deviceManager.ActiveDevice ??= device;
-            });
-
-            BindSession(device.Id, session);
-
-            ConnectionStatusChanged?.Invoke(this, (device, true));
-            return device;
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "绑定预握手 DATA 会话时出错");
-            return null;
-        }
-    }
-
-    private async Task DispatchPayloadAsync(PairedDevice device, string payload)
-    {
-        try
-        {
-            if (!payload.TrimStart().StartsWith('{') && !payload.TrimStart().StartsWith('['))
-            {
-                logger.LogWarning("跳过非 JSON 载荷：{payload}", payload.Length > 50 ? payload[..50] + "..." : payload);
-                return;
-            }
-            
-            // 首先尝试处理带type字段的JSON消息
-            try
-            {
-                using var doc = JsonDocument.Parse(payload);
-                var root = doc.RootElement;
-                
-                // 检查是否包含type字段
-                if (root.TryGetProperty("type", out var typeProp))
-                {
-                    var messageType = typeProp.GetString();
-                    logger.LogDebug("识别到JSON消息类型：{messageType}");
+                    // 新设备或公钥不匹配，需要用户确认
+                    logger.LogInformation("New device {remoteUuid} requesting connection, needs user approval", remoteUuid);
                     
-                    // 根据type字段值进行分流处理
-                    switch (messageType)
+                    // TODO这里需要实现用户确认逻辑，暂时先自动接受
+                    // TODO后续需要添加UI确认流程
+                    
+                    // 生成共享密钥，使用Notify-Relay-pc的HKDF-SHA256算法
+                    string localPublicKeyStr = Convert.ToBase64String(localDevice.PublicKey);
+                    string sharedSecretBase64 = CryptoService.GenerateSharedSecret(localPublicKeyStr, remotePublicKey);
+                    byte[] sharedSecret = Convert.FromBase64String(sharedSecretBase64);
+                    
+                    PairedDevice device;
+                    if (existingDevice != null)
                     {
-                        case "APP_LIST_RESPONSE":
-                        case "ICON_RESPONSE":
-                        case "AUDIO_REQUEST":
-                            // Notify-Relay-pc特定消息类型，使用反射调用处理方法
-                            var handleJsonMethod = messageHandler.Value.GetType().GetMethod("HandleJsonMessageAsync", 
-                                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                            if (handleJsonMethod != null)
-                            {
-                                await (Task)handleJsonMethod.Invoke(messageHandler.Value, new object[] { device, payload });
-                            }
-                            return;
-                            
-                        case "MEDIA_CONTROL":
-                            // 媒体控制消息，直接处理
-                            await HandleMediaControlMessageAsync(device, payload);
-                            return;
+                        // 更新现有设备
+                        device = existingDevice;
+                        device.PublicKey = remotePublicKey;
+                        device.SharedSecret = sharedSecret;
+                        device.IsAuthenticated = true;
+                        device.IsOnline = true;
+                        device.LastSeen = DateTimeOffset.UtcNow;
+                        device.ConnectionStatus = true;
+                        device.Session = session;
                     }
-                }
-            }
-            catch (JsonException ex)
-            {
-                logger.LogDebug("解析JSON消息时出错：{ex.Message}");
-            }
-
-            // 尝试作为普通SocketMessage处理
-            try
-            {
-                var socketMessage = SocketMessageSerializer.DeserializeMessage(payload);
-                if (socketMessage is not null && socketMessage is not SocketMessage)
-                {
-                    logger.LogDebug("处理为普通SocketMessage");
-                    await messageHandler.Value.HandleMessageAsync(device, socketMessage);
+                    else
+                    {
+                        // 创建新设备
+                        device = new PairedDevice(remoteUuid)
+                        {
+                            Name = "Unknown Device", // 后续可以通过其他方式获取设备名称
+                            PublicKey = remotePublicKey,
+                            SharedSecret = sharedSecret,
+                            IsAuthenticated = true,
+                            IsOnline = true,
+                            LastSeen = DateTimeOffset.UtcNow,
+                            ConnectionStatus = true,
+                            Session = session,
+                            Origin = Sefirah.Data.Enums.DeviceOrigin.UdpBroadcast
+                        };
+                        PairedDevices.Add(device);
+                    }
+                    
+                    // 发送接受响应
+                    SendMessage(session, $"ACCEPT:{localDevice.DeviceId}:{localPublicKeyBase64}");
+                    
+                    deviceManager.ActiveDevice = device;
+                    ConnectionStatusChanged?.Invoke(this, (device, true));
+                    logger.LogInformation("Device {remoteUuid} connected and authenticated", remoteUuid);
                     return;
                 }
             }
-            catch (JsonException ex)
+            // 兼容处理旧格式的DeviceInfo JSON消息
+            else if (SocketMessageSerializer.DeserializeMessage(message) is DeviceInfo deviceInfo)
             {
-                logger.LogDebug("解析SocketMessage时出错：{ex.Message}");
-            }
-
-            // 尝试作为通知消息处理
-            if (TryParseNotifyRelayNotification(payload, out var notificationMessage))
-            {
-                logger.LogDebug("处理为通知消息");
-                await messageHandler.Value.HandleMessageAsync(device, notificationMessage);
+                if (string.IsNullOrEmpty(deviceInfo.Nonce) || string.IsNullOrEmpty(deviceInfo.Proof))
+                {
+                    logger.LogWarning("Missing authentication data for old format message");
+                    SendMessage(session, "Rejected");
+                    DisconnectSession(session);
+                    return;
+                }
+                
+                var connectedSessionIpAddress = session.Socket.RemoteEndPoint?.ToString()?.Split(':')[0];
+                logger.LogInformation("Received old format connection from {connectedSessionIpAddress}", connectedSessionIpAddress);
+                
+                var device = await deviceManager.VerifyDevice(deviceInfo, connectedSessionIpAddress);
+                
+                if (device is not null)
+                {
+                    logger.LogInformation("Old format device {deviceId} connected", device.Id);
+                    
+                    deviceManager.UpdateOrAddDevice(device, connectedDevice =>
+                    {
+                        connectedDevice.ConnectionStatus = true;
+                        connectedDevice.Session = session;
+                        
+                        deviceManager.ActiveDevice = connectedDevice;
+                        device = connectedDevice;
+                        
+                        if (device.DeviceSettings.AdbAutoConnect && !string.IsNullOrEmpty(connectedSessionIpAddress))
+                        {
+                            adbService.TryConnectTcp(connectedSessionIpAddress);
+                        }
+                    });
+                    
+                    var (_, avatar) = await UserInformation.GetCurrentUserInfoAsync();
+                    var localDevice = await deviceManager.GetLocalDeviceAsync();
+                    
+                    // Generate our authentication proof for old format
+                    var sharedSecret = EcdhHelper.DeriveKey(deviceInfo.PublicKey!, localDevice.PrivateKey);
+                    var nonce = EcdhHelper.GenerateNonce();
+                    var proof = EcdhHelper.GenerateProof(sharedSecret, nonce);
+                    
+                    SendMessage(session, SocketMessageSerializer.Serialize(new DeviceInfo
+                    {
+                        DeviceId = localDevice.DeviceId,
+                        DeviceName = localDevice.DeviceName,
+                        Avatar = avatar,
+                        PublicKey = Convert.ToBase64String(localDevice.PublicKey),
+                        Nonce = nonce,
+                        Proof = proof
+                    }));
+                    
+                    ConnectionStatusChanged?.Invoke(this, (device, true));
+                }
+                else
+                {
+                    SendMessage(session, "Rejected");
+                    await Task.Delay(50);
+                    logger.LogInformation("Old format device verification failed or was declined");
+                    DisconnectSession(session);
+                }
                 return;
             }
             
-            logger.LogWarning("无法处理的JSON载荷：{payload}", payload.Length > 100 ? payload[..100] + "..." : payload);
+            logger.LogWarning("First message was not a HANDSHAKE or DeviceInfo: {message}", message);
+            SendMessage(session, $"REJECT:{string.Empty}");
+            DisconnectSession(session);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "分发载荷时出错");
-        }
-    }
-    
-    /// <summary>
-    /// 处理媒体控制消息
-    /// </summary>
-    /// <param name="device">设备</param>
-    /// <param name="payload">消息内容</param>
-    private async Task HandleMediaControlMessageAsync(PairedDevice device, string payload)
-    {
-        try
-        {
-            logger.LogDebug("处理媒体控制消息：{payload}", payload.Length > 100 ? payload[..100] + "..." : payload);
-            
-            using var doc = JsonDocument.Parse(payload);
-            var root = doc.RootElement;
-            
-            // 获取action字段
-            if (root.TryGetProperty("action", out var actionProp))
-            {
-                var action = actionProp.GetString();
-                logger.LogDebug("媒体控制动作：{action}");
-                
-                // 处理不同的媒体控制动作
-                switch (action)
-                {
-                    case "playPause":
-                    case "next":
-                    case "previous":
-                        // 执行媒体控制动作
-                        logger.LogDebug("执行媒体控制动作：{action}");
-                        try
-                        {
-                            var playbackService = Ioc.Default.GetRequiredService<IPlaybackService>();
-                            PlaybackActionType actionType = action switch
-                            {
-                                "playPause" => PlaybackActionType.Play,
-                                "next" => PlaybackActionType.Next,
-                                "previous" => PlaybackActionType.Previous,
-                                _ => PlaybackActionType.Play
-                            };
-                            await playbackService.HandleMediaActionAsync(new PlaybackAction
-                            {
-                                PlaybackActionType = actionType,
-                                Source = "MediaControl"
-                            });
-                        }
-                        catch (Exception ex)
-                        {
-                            logger.LogError(ex, "执行媒体控制动作时出错：{action}", action);
-                        }
-                        break;
-                        
-                    case "audioRequest":
-                        // 处理音频转发请求
-                        logger.LogDebug("收到音频转发请求");
-                        try
-                        {
-                            // 构建仅音频转发的 scrcpy 参数
-                            string customArgs = "--no-video --no-control";
-                            
-                            // 启动 scrcpy 仅音频转发
-                            bool success = await screenMirrorService.StartScrcpy(device, customArgs);
-                            
-                            // 构造响应
-                            var response = new
-                            {
-                                type = "MEDIA_CONTROL",
-                                action = "audioResponse",
-                                result = success ? "accepted" : "rejected"
-                            };
-                            string responseJson = JsonSerializer.Serialize(response);
-                            // 发送响应，使用 DATA_MEDIA_CONTROL 协议头
-                            SendRequest(device.Id, "DATA_MEDIA_CONTROL", responseJson, "音频转发响应");
-                            
-                            logger.LogDebug("音频转发请求处理完成，结果：{result}", success ? "accepted" : "rejected");
-                        }
-                        catch (Exception ex)
-                        {
-                            logger.LogError(ex, "处理音频转发请求时出错");
-                            
-                            // 发送拒绝响应，使用 DATA_MEDIA_CONTROL 协议头
-                            var errorResponse = new
-                            {
-                                type = "MEDIA_CONTROL",
-                                action = "audioResponse",
-                                result = "rejected"
-                            };
-                            string errorResponseJson = JsonSerializer.Serialize(errorResponse);
-                            SendRequest(device.Id, "DATA_MEDIA_CONTROL", errorResponseJson, "音频转发响应");
-                        }
-                        break;
-                        
-                    case "audioResponse":
-                        // 处理音频转发响应
-                        logger.LogDebug("收到音频转发响应");
-                        break;
-                        
-                    default:
-                        logger.LogWarning("未知媒体控制动作：{action}", action);
-                        break;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "处理媒体控制消息时出错");
+            logger.LogError(ex, "Error processing first message for session {sessionId}: {ex}", session.Id, ex);
+            DisconnectSession(session);
         }
     }
 
@@ -1173,53 +768,103 @@ public class NetworkService(
 
         try
         {
-            using var doc = JsonDocument.Parse(payload);
-            if (doc.RootElement.ValueKind is not JsonValueKind.Object) return false;
-
-            var root = doc.RootElement;
-
-            if (!root.TryGetProperty("packageName", out var packageProp)) return false;
-
-            var packageName = packageProp.GetString();
-            if (string.IsNullOrWhiteSpace(packageName)) return false;
-            
-            // 过滤超级岛通知，识别段是'superisland:'
-            if (packageName.StartsWith("superisland:"))
+            // 处理Notify-Relay-pc格式的消息
+            if (message.StartsWith("HANDSHAKE:"))
             {
-                // 注释掉丢弃超级岛通知的调试日志
-                // logger.LogDebug("丢弃超级岛通知: {PackageName}", packageName);
-                return false;
+                // 处理握手请求，这部分会在HandleVerification方法中处理
+                logger.LogDebug("Received HANDSHAKE message, forwarding to HandleVerification");
+                // 由于Handshake消息应该在设备未验证时处理，这里不应该收到已验证设备的Handshake消息
+                return;
             }
-
-            var timeMs = root.TryGetProperty("time", out var timeProp)
-                ? timeProp.GetInt64()
-                : DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-            string notificationKey = root.TryGetProperty("id", out var idProp) && !string.IsNullOrWhiteSpace(idProp.GetString())
-                ? idProp.GetString()!
-                : root.TryGetProperty("key", out var keyProp) && !string.IsNullOrWhiteSpace(keyProp.GetString())
-                    ? keyProp.GetString()!
-                    : $"{packageName}:{timeMs}";
-
-            notificationMessage = new NotificationMessage
+            else if (message.StartsWith("HEARTBEAT:"))
             {
-                NotificationKey = notificationKey,
-                TimeStamp = timeMs.ToString(),
-                NotificationType = NotificationType.New,
-                AppPackage = packageName,
-                AppName = root.TryGetProperty("appName", out var appNameProp) ? appNameProp.GetString() : null,
-                Title = root.TryGetProperty("title", out var titleProp) ? titleProp.GetString() : null,
-                Text = root.TryGetProperty("text", out var textProp) ? textProp.GetString() : null,
-                AppIcon = root.TryGetProperty("appIcon", out var appIconProp) ? appIconProp.GetString() : null,
-                LargeIcon = root.TryGetProperty("largeIcon", out var largeIconProp) ? largeIconProp.GetString() : null,
-                CoverUrl = root.TryGetProperty("coverUrl", out var coverUrlProp) ? coverUrlProp.GetString() : null
-            };
-
-            return true;
+                // 处理心跳消息
+                var parts = message.Split(':');
+                if (parts.Length >= 3)
+                {
+                    string remoteUuid = parts[1];
+                    // 更新设备在线状态
+                    await App.MainWindow.DispatcherQueue.EnqueueAsync(() =>
+                    {
+                        device.IsOnline = true;
+                        device.LastSeen = DateTimeOffset.UtcNow;
+                    });
+                    logger.LogDebug("Received HEARTBEAT from device {remoteUuid}", remoteUuid);
+                }
+                return;
+            }
+            else if (message.StartsWith("DATA_JSON:"))
+            {
+                // 处理通知数据消息
+                var parts = message.Split(':');
+                if (parts.Length >= 4)
+                {
+                    string remoteUuid = parts[1];
+                    string remotePublicKey = parts[2];
+                    string encryptedPayload = string.Join(":", parts.Skip(3));
+                    
+                    // 解密payload并处理通知
+                    string sharedSecretBase64 = Convert.ToBase64String(device.SharedSecret);
+                    string decryptedPayload = CryptoService.Decrypt(encryptedPayload, sharedSecretBase64);
+                    
+                    logger.LogDebug("Received DATA_JSON from device {remoteUuid}, decrypted payload: {decryptedPayload}", remoteUuid, decryptedPayload);
+                    
+                    // 调用messageHandler处理Notify-Relay-pc格式的通知数据
+                    await messageHandler.Value.HandleNotifyRelayNotificationAsync(device, decryptedPayload);
+                }
+                return;
+            }
+            else if (message.StartsWith("DATA_ICON_REQUEST:"))
+            {
+                // 处理图标请求
+                logger.LogDebug("Received DATA_ICON_REQUEST message");
+                return;
+            }
+            else if (message.StartsWith("DATA_ICON_RESPONSE:"))
+            {
+                // 处理图标响应
+                logger.LogDebug("Received DATA_ICON_RESPONSE message");
+                return;
+            }
+            else if (message.StartsWith("DATA_APP_LIST_REQUEST:"))
+            {
+                // 处理应用列表请求
+                logger.LogDebug("Received DATA_APP_LIST_REQUEST message");
+                return;
+            }
+            else if (message.StartsWith("DATA_APP_LIST_RESPONSE:"))
+            {
+                // 处理应用列表响应
+                logger.LogDebug("Received DATA_APP_LIST_RESPONSE message");
+                return;
+            }
+            else if (message.StartsWith("ACCEPT:"))
+            {
+                // 处理握手接受响应
+                logger.LogDebug("Received ACCEPT message");
+                return;
+            }
+            else if (message.StartsWith("REJECT:"))
+            {
+                // 处理握手拒绝响应
+                logger.LogDebug("Received REJECT message");
+                return;
+            }
+            // 兼容处理旧格式的JSON消息
+            else if (message.TrimStart().StartsWith('{') || message.TrimStart().StartsWith('['))
+            {
+                var socketMessage = SocketMessageSerializer.DeserializeMessage(message);
+                if (socketMessage is not null)
+                {
+                    await messageHandler.Value.HandleMessageAsync(device, socketMessage);
+                }
+                return;
+            }
+            logger.LogDebug("Received unknown message format: {message}", message);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            return false;
+            logger.LogError(ex, "Error processing message: {exMessage}", ex.Message);
         }
     }
 
@@ -1227,41 +872,21 @@ public class NetworkService(
     {
         try
         {
-            sessionBuffers.TryRemove(session.Id, out _);
-            UnbindSession(session);
+            bufferedData = string.Empty;
+            
+            // 直接调用ServerSession的Disconnect和Dispose方法，内部会处理不同类型的会话
             session.Disconnect();
             session.Dispose();
-            DetachSession(session);
-        }
-        catch (Exception ex)
-        {
-            logger.Error($"断开连接时出错：{ex.Message}");
-        }
-    }
-
-    private void DetachSession(ServerSession session)
-    {
-        var device = GetDeviceBySession(session) ?? PairedDevices.FirstOrDefault(d => d.Session == session);
-        if (device is null) return;
-
-        UpdateDeviceState(device, d =>
-        {
-            d.Session = null;
-            // 不要在TCP会话断开时立即标记为离线，由心跳超时决定
-            logger.LogTrace($"设备 {d.Name} 的会话已解绑");
-        });
-    }
-
-    private void MarkDeviceAlive(PairedDevice device)
-    {
-        var now = DateTime.UtcNow;
-        UpdateDeviceState(device, d =>
-        {
-            d.LastHeartbeat = now;
-            if (!d.ConnectionStatus)
+            
+            var device = PairedDevices.FirstOrDefault(d => d.Session == session);   
+            if (device is not null)
             {
-                d.ConnectionStatus = true;
-                ConnectionStatusChanged?.Invoke(this, (d, true));
+                App.MainWindow.DispatcherQueue.EnqueueAsync(() =>
+                {
+                    device.ConnectionStatus = false;
+                    device.Session = null;
+                    logger.LogInformation("Device {deviceName} session disconnected, status updated", device.Name);
+                });
             }
         });
     }
@@ -1295,9 +920,7 @@ public class NetworkService(
         }
         catch (Exception ex)
         {
-            logger.LogWarning("获取系统电量失败：{ex}", ex);
-            // 异常情况下返回默认值100%
-            return 100;
+            logger.LogError(ex, "Error in Disconnecting: {exMessage}", ex.Message);
         }
     }
 
