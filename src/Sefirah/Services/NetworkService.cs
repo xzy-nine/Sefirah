@@ -119,19 +119,14 @@ public class NetworkService(
     {
         logger.LogInformation("开始发送图标请求：deviceId={deviceId}, packageCount={packageCount}", deviceId, packageNames.Count);
 
-        // 处理mediaplay:前缀，移除前缀后再发送请求
-        var processedPackageNames = packageNames.Select(packageName => 
-            packageName.StartsWith("mediaplay:") ? packageName.Substring("mediaplay:".Length) : packageName
-        ).ToList();
-        
         // 构建图标请求对象（支持单个或多个包名）
         object requestObj;
-        if (processedPackageNames.Count == 1)
+        if (packageNames.Count == 1)
         {
             requestObj = new
             {
                 type = "ICON_REQUEST",
-                packageName = processedPackageNames.First(),
+                packageName = packageNames.First(),
                 time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
             };
         }
@@ -140,7 +135,7 @@ public class NetworkService(
             requestObj = new
             {
                 type = "ICON_REQUEST",
-                packageNames = processedPackageNames,
+                packageNames = packageNames,
                 time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
             };
         }

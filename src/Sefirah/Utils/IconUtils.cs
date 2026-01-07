@@ -57,11 +57,8 @@ public static class IconUtils
     /// <returns>URI to the app icon file</returns>
     public static async Task<Uri?> GetAppIconUriAsync(string packageName)
     {
-        // 处理mediaplay:前缀，移除前缀后再处理图标
-        string actualPackageName = packageName.StartsWith("mediaplay:") ? packageName.Substring("mediaplay:".Length) : packageName;
-        
         // 对于 Notify-Relay 应用包名，返回内置图标 URI
-        if (actualPackageName == NotifyRelayPackageName)
+        if (packageName == NotifyRelayPackageName)
         {
             return new Uri(NotifyRelayAppIconPath);
         }
@@ -70,7 +67,7 @@ public static class IconUtils
         {
             var appIconsFolder = await GetAppIconsFolderAsync();
             // First try with .png extension (most icons are saved as {package}.png)
-            string fileNameWithExt = actualPackageName.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ? actualPackageName : actualPackageName + ".png";
+            string fileNameWithExt = packageName.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ? packageName : packageName + ".png";
             try
             {
                 await appIconsFolder.GetFileAsync(fileNameWithExt);
@@ -79,8 +76,8 @@ public static class IconUtils
             catch (FileNotFoundException)
             {
                 // Fallback: try without extension (legacy)
-                await appIconsFolder.GetFileAsync(actualPackageName);
-                return new Uri($"ms-appdata:///local/{AppIconsFolderName}/{actualPackageName}");
+                await appIconsFolder.GetFileAsync(packageName);
+                return new Uri($"ms-appdata:///local/{AppIconsFolderName}/{packageName}");
             }
         }
         catch (FileNotFoundException)
@@ -91,30 +88,24 @@ public static class IconUtils
 
     public static string GetAppIconFilePath(string packageName)
     {
-        // 处理mediaplay:前缀，移除前缀后再处理图标
-        string actualPackageName = packageName.StartsWith("mediaplay:") ? packageName.Substring("mediaplay:".Length) : packageName;
-        
         // 对于 Notify-Relay 应用包名，返回内置图标路径
-        if (actualPackageName == NotifyRelayPackageName)
+        if (packageName == NotifyRelayPackageName)
         {
             return NotifyRelayAppIconPath;
         }
         
-        return $@"{ApplicationData.Current.LocalFolder.Path}\{AppIconsFolderName}\{actualPackageName}.png";
+        return $@"{ApplicationData.Current.LocalFolder.Path}\{AppIconsFolderName}\{packageName}.png";
     }
 
     public static string GetAppIconPath(string packageName)
     {
-        // 处理mediaplay:前缀，移除前缀后再处理图标
-        string actualPackageName = packageName.StartsWith("mediaplay:") ? packageName.Substring("mediaplay:".Length) : packageName;
-        
         // 对于 Notify-Relay 应用包名，返回内置图标路径
-        if (actualPackageName == NotifyRelayPackageName)
+        if (packageName == NotifyRelayPackageName)
         {
             return NotifyRelayAppIconPath;
         }
         
-        return $"ms-appdata:///local/{AppIconsFolderName}/{actualPackageName}.png";
+        return $"ms-appdata:///local/{AppIconsFolderName}/{packageName}.png";
     }
 
     /// <summary>
@@ -124,18 +115,15 @@ public static class IconUtils
     /// <returns>True if the icon file exists, false otherwise</returns>
     public static bool AppIconExists(string packageName)
     {
-        // 处理mediaplay:前缀，移除前缀后再检查图标
-        string actualPackageName = packageName.StartsWith("mediaplay:") ? packageName.Substring("mediaplay:".Length) : packageName;
-        
         // 对于 Notify-Relay 应用包名，始终返回 true，使用内置图标
-        if (actualPackageName == NotifyRelayPackageName)
+        if (packageName == NotifyRelayPackageName)
         {
             return true;
         }
         
         try
         {
-            string iconFilePath = GetAppIconFilePath(actualPackageName);
+            string iconFilePath = GetAppIconFilePath(packageName);
             return File.Exists(iconFilePath);
         }
         catch (Exception)
@@ -152,11 +140,8 @@ public static class IconUtils
     /// <param name="appPackage">App package name</param>
     public static async Task SaveAppIconToPathAsync(string? appIconBase64, string appPackage)
     {
-        // 处理mediaplay:前缀，移除前缀后再保存图标
-        string actualPackageName = appPackage.StartsWith("mediaplay:") ? appPackage.Substring("mediaplay:".Length) : appPackage;
-        
         // 对于 Notify-Relay 应用包名，跳过保存，使用内置图标
-        if (actualPackageName == NotifyRelayPackageName)
+        if (appPackage == NotifyRelayPackageName)
         {
             return;
         }
@@ -178,7 +163,7 @@ public static class IconUtils
             }
             
             var appIconsFolder = await GetAppIconsFolderAsync();
-            var file = await appIconsFolder.CreateFileAsync($"{actualPackageName}.png", CreationCollisionOption.ReplaceExisting);
+            var file = await appIconsFolder.CreateFileAsync($"{appPackage}.png", CreationCollisionOption.ReplaceExisting);
             using var stream = await file.OpenAsync(FileAccessMode.ReadWrite);
             using var dataWriter = new DataWriter(stream);
             dataWriter.WriteBytes(bytes);
@@ -197,13 +182,10 @@ public static class IconUtils
     /// <returns>图标请求 JSON 字符串</returns>
     public static string BuildIconRequest(string packageName)
     {
-        // 处理mediaplay:前缀，移除前缀后再构建请求
-        string actualPackageName = packageName.StartsWith("mediaplay:") ? packageName.Substring("mediaplay:".Length) : packageName;
-        
         var requestObj = new
         {
             type = "ICON_REQUEST",
-            packageName = actualPackageName,
+            packageName = packageName,
             time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
         };
         

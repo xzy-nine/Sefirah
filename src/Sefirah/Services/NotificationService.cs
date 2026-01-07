@@ -148,9 +148,7 @@ public class NotificationService(
                 if (filter == NotificationFilter.Disabled) return;
 
                 // 检查是否需要请求图标
-                // 处理mediaplay:前缀，移除前缀后再检查图标
-                string actualPackageName = message.AppPackage?.StartsWith("mediaplay:") == true ? message.AppPackage.Substring("mediaplay:".Length) : message.AppPackage;
-                bool needIconRequest = !string.IsNullOrEmpty(actualPackageName) && !IconUtils.AppIconExists(actualPackageName);
+                bool needIconRequest = !string.IsNullOrEmpty(message.AppPackage) && !IconUtils.AppIconExists(message.AppPackage);
                 TaskCompletionSource<bool>? iconRequestTcs = null;
                 string? requestKey = null;
                 
@@ -161,8 +159,8 @@ public class NotificationService(
                     iconRequestTcs = new TaskCompletionSource<bool>();
                     pendingIconRequests[requestKey] = iconRequestTcs;
                     
-                    // 发送图标请求，使用实际包名
-                    networkService.SendIconRequest(device.Id, actualPackageName);
+                    // 发送图标请求
+                    networkService.SendIconRequest(device.Id, message.AppPackage);
                 }
 
                 // 等待图标请求完成，最长等待 3 秒
@@ -615,12 +613,10 @@ public class NotificationService(
             {
                 if (notification.Icon == null && !string.IsNullOrEmpty(notification.AppPackage))
                 {
-                    // 处理mediaplay:前缀，移除前缀后再处理图标
-                    string actualPackageName = notification.AppPackage.StartsWith("mediaplay:") ? notification.AppPackage.Substring("mediaplay:".Length) : notification.AppPackage;
                     // 确保图标路径正确
-                    notification.IconPath = IconUtils.GetAppIconPath(actualPackageName);
+                    notification.IconPath = IconUtils.GetAppIconPath(notification.AppPackage);
                     // 检查图标文件是否存在，如果存在则尝试加载图标
-                    if (IconUtils.AppIconExists(actualPackageName))
+                    if (IconUtils.AppIconExists(notification.AppPackage))
                     {
                         // 异步加载图标，不阻塞主线程
                         _ = notification.LoadIconAsync();
@@ -687,14 +683,12 @@ public class NotificationService(
                     // 确保图标路径正确设置
                         if (!string.IsNullOrEmpty(msg.AppPackage))
                         {
-                            // 处理mediaplay:前缀，移除前缀后再处理图标
-                            string actualPackageName = msg.AppPackage.StartsWith("mediaplay:") ? msg.AppPackage.Substring("mediaplay:".Length) : msg.AppPackage;
                             // 直接设置图标路径，确保所有设备的通知都能访问到正确的图标路径
-                            string iconPath = IconUtils.GetAppIconPath(actualPackageName);
+                            string iconPath = IconUtils.GetAppIconPath(msg.AppPackage);
                             notif.IconPath = iconPath;
                             
                             // 确保图标文件存在
-                            if (IconUtils.AppIconExists(actualPackageName))
+                            if (IconUtils.AppIconExists(msg.AppPackage))
                             {
                                 // 立即同步加载图标，确保历史通知能显示图标
                                 await notif.LoadIconAsync();
@@ -702,9 +696,9 @@ public class NotificationService(
                             else
                             {
                                 // 如果图标不存在，尝试异步请求图标
-                                logger.LogDebug("通知图标不存在，尝试请求图标: {AppPackage}", actualPackageName);
-                                // 发送图标请求，使用实际包名
-                                networkService.SendIconRequest(device.Id, actualPackageName);
+                                logger.LogDebug("通知图标不存在，尝试请求图标: {AppPackage}", msg.AppPackage);
+                                // 发送图标请求
+                                networkService.SendIconRequest(device.Id, msg.AppPackage);
                                 // 延迟一段时间后再次尝试加载图标
                                 await Task.Delay(500);
                                 await notif.LoadIconAsync();
