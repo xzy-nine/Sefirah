@@ -401,14 +401,50 @@ public class DiscoveryService(
                     var index = DiscoveredDevices.IndexOf(existingDevice);
                     DiscoveredDevices[index] = discovered;
                 }
-                else
+            // 兼容处理旧格式的UDP广播
+            else if (SocketMessageSerializer.DeserializeMessage(message) is UdpBroadcast broadcast)
+            {
+                if (broadcast.DeviceId == localDevice?.DeviceId) return;
+                
+                IPEndPoint? deviceEndpoint = broadcast.IpAddresses.Select(ip => new IPEndPoint(IPAddress.Parse(ip), DiscoveryPort)).FirstOrDefault();
+                
+                if (deviceEndpoint is not null && !broadcastEndpoints.Contains(deviceEndpoint))
                 {
                     // 添加新设备
                     DiscoveredDevices.Add(discovered);
                 }
-            });
-
-            StartCleanupTimer();
+                
+                // Skip if we already have this device via mDNS
+                if (DiscoveredMdnsServices.Any(s => s.PublicKey == broadcast.PublicKey)) return;
+                
+                var sharedSecret = EcdhHelper.DeriveKey(broadcast.PublicKey, localDevice!.PrivateKey);
+                
+                await dispatcher.EnqueueAsync(() =>
+                {
+                    var existingDevice = DiscoveredDevices.FirstOrDefault(d => d.DeviceId == broadcast.DeviceId);
+                    if (existingDevice is not null)
+                    {
+                        // 更新现有设备
+                        existingDevice.LastSeen = DateTimeOffset.FromUnixTimeMilliseconds(broadcast.TimeStamp);
+                        existingDevice.IsOnline = true;
+                    }
+                    else
+                    {
+                        // 添加新设备
+                        DiscoveredDevice device = new(
+                            broadcast.DeviceId,
+                            broadcast.PublicKey,
+                            broadcast.DeviceName,
+                            sharedSecret,
+                            DateTimeOffset.FromUnixTimeMilliseconds(broadcast.TimeStamp),
+                            DeviceOrigin.UdpBroadcast);
+                        
+                        DiscoveredDevices.Add(device);
+                    }
+                });
+                
+                StartCleanupTimer();
+            }
         }
         catch (Exception ex)
         {
@@ -472,16 +508,13 @@ public class DiscoveryService(
                               now - d.LastSeen > staleThreshold)
                     .ToList();
 
-                foreach (var device in staleDevices)
+                // 更新离线设备的状态，不再直接删除
+                foreach (var device in DiscoveredDevices.Where(d => d.Origin is DeviceOrigin.UdpBroadcast))
                 {
                     DiscoveredDevices.Remove(device);
                 }
 
-                // Stop timer if no UDP devices left
-                if (!DiscoveredDevices.Any(d => d.Origin is DeviceOrigin.UdpBroadcast))
-                {
-                    StopCleanupTimer();
-                }
+                // 保留定时器运行，以便持续检查设备状态
             });
         }
         catch (Exception ex)

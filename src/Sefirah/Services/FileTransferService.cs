@@ -27,7 +27,7 @@ public class FileTransferService(
     private FileMetadata? currentFileMetadata;
     private long bytesTransferred = 0;
     private Client? client;
-    private Server? server;
+    private Sefirah.Services.Socket.SslServer? server;
     private ServerInfo? serverInfo;
     private ServerSession? session;
     private uint notificationSequence = 1;

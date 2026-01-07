@@ -1,6 +1,7 @@
 using System.Collections.Specialized;
 using CommunityToolkit.WinUI;
 using Sefirah.Data.Contracts;
+using Sefirah.Data.Enums;
 using Sefirah.Services.Socket;
 
 namespace Sefirah.Data.Models;
@@ -105,6 +106,13 @@ public partial class PairedDevice : ObservableObject
         private set => SetProperty(ref deviceSettings, value);
     }
 
+    // 添加Notify-Relay-pc协议所需的属性
+    public string PublicKey { get; set; } = string.Empty;
+    public byte[] SharedSecret { get; set; } = Array.Empty<byte>();
+    public bool IsAuthenticated { get; set; } = false;
+    public bool IsOnline { get; set; } = false;
+    public DateTimeOffset LastSeen { get; set; } = DateTimeOffset.UtcNow;
+    public DeviceOrigin Origin { get; set; } = DeviceOrigin.UdpBroadcast;
 
     public PairedDevice(string Id)
     {

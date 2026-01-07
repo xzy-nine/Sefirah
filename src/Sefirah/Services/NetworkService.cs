@@ -1155,6 +1155,10 @@ public class NetworkService(
                         break;
                 }
             }
+            
+            logger.LogWarning("First message was not a HANDSHAKE or DeviceInfo: {message}", message);
+            SendMessage(session, $"REJECT:{string.Empty}");
+            DisconnectSession(session);
         }
         catch (Exception ex)
         {

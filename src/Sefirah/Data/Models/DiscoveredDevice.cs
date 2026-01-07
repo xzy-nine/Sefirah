@@ -23,7 +23,7 @@ public class DiscoveredDevice(
     {
         get
         {
-            if (HashedKey is null)
+            if (HashedKey is null || HashedKey.Length < 4)
             {
                 return "000000";
             }
