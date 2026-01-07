@@ -4,6 +4,7 @@ using Microsoft.UI.Windowing;
 using Sefirah.Data.Contracts;
 using Sefirah.Data.Models;
 using Sefirah.Views.DevicePreferences;
+using Uno.UI.HotDesign;
 using Rect = Windows.Foundation.Rect;
 
 namespace Sefirah.Views;

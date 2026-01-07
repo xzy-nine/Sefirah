@@ -48,7 +48,6 @@ public sealed partial class DeviceDiscoveryPage : Page
     protected override void OnNavigatingFrom(NavigatingCancelEventArgs e)
     {
         base.OnNavigatingFrom(e);
-        DiscoveryService.StopDiscovery();
     }
 }
 

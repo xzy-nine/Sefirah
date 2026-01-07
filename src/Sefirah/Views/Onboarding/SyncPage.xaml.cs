@@ -30,7 +30,6 @@ public sealed partial class SyncPage : Page
 
     protected override void OnNavigatingFrom(NavigatingCancelEventArgs e)
     {
-        DiscoveryService.StopDiscovery();
         base.OnNavigatingFrom(e);
     }
 }

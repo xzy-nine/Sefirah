@@ -13,6 +13,7 @@ using Sefirah.Extensions;
 using Sefirah.Data.Enums;
 using Microsoft.UI.Windowing;
 using WinRT.Interop;
+using Uno.UI.HotDesign;
 
 #if WINDOWS
 using Sefirah.Platforms.Windows.Helpers;
@@ -44,7 +45,7 @@ public partial class App : Application
         {
             var builder = this.ConfigureApp(args);
             MainWindow = builder.Window;
-            MainWindow.AppWindow.Title = "Sefirah";
+            MainWindow.AppWindow.Title = "NotifyRelay";
             MainWindow.SetWindowIcon();
 #if WINDOWS
             WindowHandle = WindowNative.GetWindowHandle(MainWindow);

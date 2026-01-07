@@ -241,10 +241,10 @@
     <value>取消</value>
   </data>
   <data name="OnboardingWelcome.Title" xml:space="preserve">
-    <value>欢迎使用 Sefirah</value>
+    <value>欢迎使用 NotifyRelay</value>
   </data>
   <data name="OnboardingWelcome.Subtitle" xml:space="preserve">
-    <value>请通过GitHub页面下载并安装配套应用程序以开始使用。</value>
+    <value>请通过GitHub页面下载并安装配套应用程序以开始使用 NotifyRelay。\n感谢Sefirah作者shrimqy构建的应用主体,让我这个小白能自行编译并使用NotifyRelay,本pc端的主体是在Sefirah的基础上修改而来的。</value>
   </data>
   <data name="OnboardingWelcomeGetStarted" xml:space="preserve">
     <value>开始</value>
@@ -262,7 +262,7 @@
     <value>设备连接请求</value>
   </data>
   <data name="ConnectionRequest.Subtitle" xml:space="preserve">
-    <value>请验证两台设备上的配对密钥是否匹配：</value>
+    <value>请验证两台设备名称等是否匹配</value>
   </data>
   <data name="ConnectionRequestRejectButton" xml:space="preserve">
     <value>拒绝</value>

@@ -6,16 +6,16 @@
         <UnoSingleProject>true</UnoSingleProject>
 
         <!-- Display name -->
-        <ApplicationTitle>Sefirah</ApplicationTitle>
+        <ApplicationTitle>NotifyRelay</ApplicationTitle>
         <!-- App Identifier -->
-        <ApplicationId>com.sefirah.castle</ApplicationId>
+        <ApplicationId>xzy-nien.NotifyRelay</ApplicationId>
         <!-- Versions -->
         <ApplicationDisplayVersion>2.1.0</ApplicationDisplayVersion>
         <ApplicationVersion>3</ApplicationVersion>
         <!-- Package Publisher -->
-        <ApplicationPublisher>shrimqy</ApplicationPublisher>
+        <ApplicationPublisher>xzy-nien</ApplicationPublisher>
         <!-- Package Description -->
-        <Description>Sefirah powered by Uno Platform.</Description>
+        <Description>NotifyRelay powered by Uno Platform.</Description>
         <!--
             If you encounter this error message:
 

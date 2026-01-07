@@ -71,7 +71,7 @@
                     <uap5:StartupTask
                     TaskId="8B5D3E3F-9B69-4E8A-A9F7-BFCA793B9AF0"
                     Enabled="false"
-                    DisplayName="Sefirah" />
+                    DisplayName="NotifyRelay" />
                 </uap5:Extension>
                 <cloudfiles:Extension Category="windows.cloudFiles">
                     <cloudfiles:CloudFiles>
@@ -93,7 +93,7 @@
                 </desktop:Extension>
                 <com:Extension Category="windows.comServer">
                     <com:ComServer>
-                        <com:ExeServer Executable="Sefirah.exe" DisplayName="Sefirah" Arguments="----AppNotificationActivated:">
+                        <com:ExeServer Executable="NotifyRelay.exe" DisplayName="NotifyRelay" Arguments="----AppNotificationActivated:">
                             <com:Class Id="2b6c1f58-0e8d-4c66-9bff-d6d2c58e52b6" />
                         </com:ExeServer>
                         <com:ExeServer DisplayName="Sync Command Handler" Executable="$targetnametoken$.exe">
@@ -110,7 +110,7 @@
 
     <Extensions>
         <desktop2:Extension Category="windows.firewallRules">
-            <desktop2:FirewallRules Executable="Sefirah.exe">
+            <desktop2:FirewallRules Executable="$targetnametoken$.exe">
                 <desktop2:Rule Direction="in" IPProtocol="TCP" LocalPortMin="5149" LocalPortMax="5169" Profile="all"/>
                 <desktop2:Rule Direction="out" IPProtocol="TCP" LocalPortMin="5149" LocalPortMax="5169" Profile="all"/>
                 <desktop2:Rule Direction="in" IPProtocol="UDP" LocalPortMin="5149" LocalPortMax="5169" Profile="all"/>
