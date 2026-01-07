@@ -186,29 +186,24 @@
                                 Padding="5"
                                 Background="Transparent"
                                 BorderThickness="0">
-                                <FontIcon Glyph="{x:Bind ViewModel.Device.Status.RingerMode, Converter={StaticResource RingerModeToIconConverter}, Mode=OneWay}" />
+                                <FontIcon Glyph="{x:Bind ViewModel.AudioStatusIcon, Mode=OneWay}" />
+                                <ToolTipService.ToolTip>
+                                    <ToolTip Content="{x:Bind ViewModel.AudioStatusText, Mode=OneWay}" />
+                                </ToolTipService.ToolTip>
                                 <Button.Flyout>
                                     <MenuFlyout>
                                         <MenuFlyoutItem
                                             Command="{x:Bind ViewModel.SetRingerModeCommand}"
                                             CommandParameter="2"
-                                            Text="{helpers:ResourceString Name=RingerModeNormal/Content}">
+                                            Text="仅音频播放中">
                                             <MenuFlyoutItem.Icon>
                                                 <FontIcon Glyph="&#xE995;" />
                                             </MenuFlyoutItem.Icon>
                                         </MenuFlyoutItem>
                                         <MenuFlyoutItem
                                             Command="{x:Bind ViewModel.SetRingerModeCommand}"
-                                            CommandParameter="1"
-                                            Text="{helpers:ResourceString Name=RingerModeVibrate/Content}">
-                                            <MenuFlyoutItem.Icon>
-                                                <FontIcon Glyph="&#xE877;" />
-                                            </MenuFlyoutItem.Icon>
-                                        </MenuFlyoutItem>
-                                        <MenuFlyoutItem
-                                            Command="{x:Bind ViewModel.SetRingerModeCommand}"
                                             CommandParameter="0"
-                                            Text="{helpers:ResourceString Name=RingerModeSilent/Content}">
+                                            Text="停止仅音频">
                                             <MenuFlyoutItem.Icon>
                                                 <FontIcon Glyph="&#xE74F;" />
                                             </MenuFlyoutItem.Icon>

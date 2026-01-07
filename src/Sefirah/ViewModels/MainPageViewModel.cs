@@ -35,6 +35,41 @@ public sealed partial class MainPageViewModel : BaseViewModel
     public partial bool LoadingScrcpy { get; set; } = false;
 
     public bool IsUpdateAvailable => UpdateService.IsUpdateAvailable;
+    
+    /// <summary>
+    /// 当前设备是否正在运行仅音频模式的 scrcpy
+    /// </summary>
+    public bool IsAudioOnlyRunning
+    {
+        get
+        {
+            if (Device == null)
+                return false;
+            return ScreenMirrorService.IsAudioOnlyRunning(Device.Id);
+        }
+    }
+    
+    /// <summary>
+    /// 获取当前音频状态的图标
+    /// </summary>
+    public string AudioStatusIcon
+    {
+        get
+        {
+            return IsAudioOnlyRunning ? "\uE995" : "\uE74F";
+        }
+    }
+    
+    /// <summary>
+    /// 获取当前音频状态的文本描述
+    /// </summary>
+    public string AudioStatusText
+    {
+        get
+        {
+            return IsAudioOnlyRunning ? "仅音频播放中" : "未转发音频";
+        }
+    }
     #endregion
 
     public MainPageViewModel()
@@ -47,6 +82,8 @@ public sealed partial class MainPageViewModel : BaseViewModel
                 if (e.PropertyName == nameof(IDeviceManager.ActiveDevice))
                 {
                     OnPropertyChanged(nameof(Device));
+                    OnPropertyChanged(nameof(IsAudioOnlyRunning));
+                    OnPropertyChanged(nameof(AudioStatusIcon));
                 }
             };
         }
@@ -62,6 +99,15 @@ public sealed partial class MainPageViewModel : BaseViewModel
                 }
             };
         }
+    }
+    
+    /// <summary>
+    /// 手动刷新音频状态属性，用于UI更新
+    /// </summary>
+    public void RefreshAudioStatus()
+    {
+        OnPropertyChanged(nameof(IsAudioOnlyRunning));
+        OnPropertyChanged(nameof(AudioStatusIcon));
     }
 
     /// <summary>
@@ -138,12 +184,25 @@ public sealed partial class MainPageViewModel : BaseViewModel
     }
 
     [RelayCommand]
-    public void SetRingerMode(string? modeStr)
+    public async void SetRingerMode(string? modeStr)
     {
         if (int.TryParse(modeStr, out int mode))
         {
-            var message = new DeviceRingerMode { RingerMode = mode };
-            SessionManager.SendMessage(Device!.Id, SocketMessageSerializer.Serialize(message));
+            // 模式2：仅音频播放中，模式0：未转发音频
+            if (mode == 2)
+            {
+                // 启动仅音频模式的 scrcpy
+                await ScreenMirrorService.StartScrcpy(Device!, "--no-video");
+            }
+            else if (mode == 0)
+            {
+                // 停止 scrcpy 进程
+                ScreenMirrorService.StopScrcpyByDeviceId(Device!.Id);
+            }
+            // 不再发送铃声模式消息到设备
+            
+            // 刷新音频状态属性，更新UI
+            RefreshAudioStatus();
         }
     }
 
