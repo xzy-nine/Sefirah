@@ -18,7 +18,7 @@ public static class SocketMessageSerializer
     public static T? Deserialize<T>(string json) => 
         JsonSerializer.Deserialize<T>(json, options);
 
-    public static SocketMessage? DeserializeMessage(string json) 
+    public static SocketMessage? DeserializeMessage(string json, ILogger? logger = null) 
     {
         try
         {
@@ -27,7 +27,7 @@ public static class SocketMessageSerializer
         }
         catch (JsonException jsonEx)
             {
-                Console.WriteLine($"直接反序列化为NotificationMessage失败: {jsonEx.Message}");
+                logger?.LogWarning("直接反序列化为NotificationMessage失败: {Message}", jsonEx.Message);
                 // 如果直接反序列化为NotificationMessage失败，尝试更简单的方式
                 try
                 {
@@ -69,14 +69,14 @@ public static class SocketMessageSerializer
                 }
                 catch (JsonException innerJsonEx)
                 {
-                    Console.WriteLine($"解析JSON时失败: {innerJsonEx.Message}");
-                    Console.WriteLine($"消息内容: {(json.Length > 100 ? json[..100] + "..." : json)}");
+                    logger?.LogWarning("解析JSON时失败: {Message}", innerJsonEx.Message);
+                    logger?.LogDebug("消息内容: {Content}", json.Length > 100 ? json[..100] + "..." : json);
                     return null;
                 }
                 catch (Exception generalEx)
                 {
-                    Console.WriteLine($"手动构造NotificationMessage失败: {generalEx.Message}");
-                    Console.WriteLine($"消息内容: {(json.Length > 100 ? json[..100] + "..." : json)}");
+                    logger?.LogWarning("手动构造NotificationMessage失败: {Message}", generalEx.Message);
+                    logger?.LogDebug("消息内容: {Content}", json.Length > 100 ? json[..100] + "..." : json);
                     return null;
                 }
             }

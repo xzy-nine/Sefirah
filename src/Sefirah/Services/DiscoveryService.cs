@@ -366,7 +366,7 @@ public class DiscoveryService(
                     StartCleanupTimer();
                 }
             // 兼容处理旧格式的UDP广播
-            else if (SocketMessageSerializer.DeserializeMessage(message) is UdpBroadcast broadcast)
+            else if (SocketMessageSerializer.DeserializeMessage(message, logger) is UdpBroadcast broadcast)
             {
                 if (broadcast.DeviceId == localDevice?.DeviceId) return;
                 

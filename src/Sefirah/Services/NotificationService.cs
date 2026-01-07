@@ -677,7 +677,7 @@ public class NotificationService(
 
             foreach (var entity in stored)
                 {
-                    var msg = SocketMessageSerializer.DeserializeMessage(entity.MessageJson) as NotificationMessage;
+                    var msg = SocketMessageSerializer.DeserializeMessage(entity.MessageJson, logger) as NotificationMessage;
                     if (msg is null) continue;
 
                     var notif = await Notification.FromMessage(msg);

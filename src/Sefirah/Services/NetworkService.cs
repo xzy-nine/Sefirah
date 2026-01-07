@@ -688,7 +688,7 @@ public class NetworkService(
                 }
             }
             // 兼容处理旧格式的DeviceInfo JSON消息
-            else if (SocketMessageSerializer.DeserializeMessage(message) is DeviceInfo deviceInfo)
+            else if (SocketMessageSerializer.DeserializeMessage(message, logger) is DeviceInfo deviceInfo)
             {
                 if (string.IsNullOrEmpty(deviceInfo.Nonce) || string.IsNullOrEmpty(deviceInfo.Proof))
                 {
@@ -853,7 +853,7 @@ public class NetworkService(
             // 兼容处理旧格式的JSON消息
             else if (message.TrimStart().StartsWith('{') || message.TrimStart().StartsWith('['))
             {
-                var socketMessage = SocketMessageSerializer.DeserializeMessage(message);
+                var socketMessage = SocketMessageSerializer.DeserializeMessage(message, logger);
                 if (socketMessage is not null)
                 {
                     await messageHandler.Value.HandleMessageAsync(device, socketMessage);
