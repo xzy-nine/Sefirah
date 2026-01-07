@@ -519,38 +519,27 @@ public class MessageHandler(
             {
                 case "started":
                     if (!root.TryGetProperty("ipAddress", out var ipProp) ||
-                        !root.TryGetProperty("port", out var portProp) ||
-                        !root.TryGetProperty("username", out var usernameProp) ||
-                        !root.TryGetProperty("password", out var passwordProp))
+                        !root.TryGetProperty("port", out var portProp))
                     {
                         logger.LogWarning("DATA_SFTP started 消息缺少必要属性");
                         return;
                     }
 
-                    var receivedUsername = usernameProp.GetString() ?? string.Empty;
-                    var receivedPassword = passwordProp.GetString() ?? string.Empty;
-
                     if (device.SharedSecret == null)
                     {
-                        logger.LogWarning("设备 {DeviceId} 没有 sharedSecret，无法验证 SFTP 凭据", device.Id);
+                        logger.LogWarning("设备 {DeviceId} 没有 sharedSecret，无法生成 SFTP 凭据", device.Id);
                         return;
                     }
 
+                    // 直接从 sharedSecret 生成 SFTP 凭据，不再依赖收到的凭据
                     var (expectedUsername, expectedPassword) = NotifyCryptoHelper.DeriveSftpCredentials(device.SharedSecret);
-
-                    if (receivedUsername != expectedUsername || receivedPassword != expectedPassword)
-                    {
-                        logger.LogWarning("SFTP 凭据验证失败：期望 username={ExpectedUsername}, password={ExpectedPassword}，收到 username={ReceivedUsername}",
-                            expectedUsername, expectedPassword, receivedUsername);
-                        return;
-                    }
 
                     var sftpInfo = new SftpServerInfo
                     {
                         IpAddress = ipProp.GetString() ?? string.Empty,
                         Port = portProp.GetInt32(),
-                        Username = receivedUsername,
-                        Password = receivedPassword
+                        Username = expectedUsername,
+                        Password = expectedPassword
                     };
 
                     await sftpService.InitializeAsync(device, sftpInfo);
