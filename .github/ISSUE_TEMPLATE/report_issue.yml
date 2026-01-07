@@ -1,16 +1,18 @@
-name: 🐞 Bug Report
-description: Create a report to help us improve
+name: 🐞 Bug Report / 问题报告
+description: Create a report to help us improve / 创建报告以帮助我们改进
 labels: [Bug]
 body:
   # Description
   - type: textarea
     id: description
     attributes:
-      label: Description
-      description: A clear and concise description of what the bug is.
+      label: Description / 问题描述
+      description: A clear and concise description of what the bug is. / 请清晰简洁地描述 bug 是什么。
       placeholder: |
         Example:
           "When I click on the button, the app crashes."
+        示例：
+          "当我点击按钮时，应用崩溃了。"
     validations:
       required: true
 
@@ -18,13 +20,13 @@ body:
   - type: textarea
     id: reproduction_steps
     attributes:
-      label: Steps To Reproduce
-      description: Steps to reproduce the behavior
+      label: Steps To Reproduce / 复现步骤
+      description: Steps to reproduce the behavior / 复现该行为的步骤
       placeholder: |
-        1. Go to '...'
-        2. Click on '....'
-        3. Scroll down to '....'
-        4. Issue here
+        1. Go to '...' / 前往 '...'
+        2. Click on '....' / 点击 '....'
+        3. Scroll down to '....' / 向下滚动到 '....'
+        4. Issue here / 在此处出现问题
     validations:
       required: true
 
@@ -32,9 +34,9 @@ body:
   - type: input
     id: windows_version
     attributes:
-      label: Windows Version
-      description: Which version of Windows are you using?
-      placeholder: "e.g. 10.0.22621.1848"
+      label: Windows Version / Windows 版本
+      description: Which version of Windows are you using? / 您使用的是哪个 Windows 版本？
+      placeholder: "e.g. 10.0.22621.1848 / 例如：10.0.22621.1848"
     validations:
       required: true
   
@@ -42,9 +44,9 @@ body:
   - type: input
     id: android_version
     attributes:
-      label: Android Version
-      description: Which version of Android are you using?
-      placeholder: "Android 14"
+      label: Android Version / Android 版本
+      description: Which version of Android are you using? / 您使用的是哪个 Android 版本？
+      placeholder: "Android 14 / Android 14"
     validations:
       required: true
 
@@ -52,9 +54,9 @@ body:
   - type: input
     id: android_device
     attributes:
-      label: Android Device
-      description: List your Android device and model.
-      placeholder: "Example: Google Pixel 7"
+      label: Android Device / Android 设备
+      description: List your Android device and model. / 请列出您的 Android 设备和型号。
+      placeholder: "Example: Google Pixel 7 / 示例：Google Pixel 7"
     validations:
       required: true
 
@@ -62,18 +64,20 @@ body:
   - type: textarea
     id: other-details
     attributes:
-      label: Other details
+      label: Other details / 其他详情
       placeholder: |
-        Additional details and attachments.
+        Additional details and attachments. / 其他相关信息、评论或截图。
 
   # Log File
   - type: textarea
     id: log-file
     attributes:
-      label: Log File
+      label: Log File / 日志文件
       description: |
         Please upload the log file as an attachment, or copy and paste the contents into this field. Make sure to remove any sensitive information.
+        请将日志文件作为附件上传，或复制粘贴内容到此处。请确保移除任何敏感信息。
       placeholder: |
         To upload the log, access it from Settings -> About -> Open log location;
+        要上传日志，请从 设置 -> 关于 -> 打开日志位置 访问它；
     validations:
       required: true

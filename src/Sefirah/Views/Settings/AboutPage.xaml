@@ -1,4 +1,4 @@
-﻿<Page
+<Page
     x:Class="Sefirah.Views.Settings.AboutPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -119,17 +119,6 @@
                     </ItemsRepeater>
                 </wuc:SettingsExpander.ItemsHeader>
             </wuc:SettingsExpander>
-
-            <!--  Support  -->
-            <wuc:SettingsCard
-                Command="{x:Bind ViewModel.OpenDonateCommand}"
-                Header="{helpers:ResourceString Name=SupportDevelopment}"
-                IsClickEnabled="True">
-                <wuc:SettingsCard.HeaderIcon>
-                    <FontIcon Glyph="&#xE719;" />
-                </wuc:SettingsCard.HeaderIcon>
-                <FontIcon Glyph="&#xE8A7;" />
-            </wuc:SettingsCard>
 
             <!--  Open Logs  -->
             <wuc:SettingsCard

@@ -12,7 +12,7 @@ public sealed partial class WelcomePage : Page
 
     private async void OnGitHubButton_Click(object sender, RoutedEventArgs e)
     {
-        var uri = new Uri(ExternalUrl.AndroidGitHubRepoUrl);
+        var uri = new Uri(Constants.ExternalUrl.AndroidGitHubRepoUrl);
         await Launcher.LaunchUriAsync(uri);
     }
 

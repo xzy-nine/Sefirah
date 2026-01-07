@@ -59,12 +59,6 @@ public partial class AboutViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private Task OpenDonate()
-    {
-        return Launcher.LaunchUriAsync(new Uri(Constants.ExternalUrl.DonateUrl)).AsTask();
-    }
-
-    [RelayCommand]
     private async Task<bool> OpenLogs()
     {
         var path = ApplicationData.Current.LocalFolder.Path;
