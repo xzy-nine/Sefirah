@@ -1,16 +1,18 @@
-name: ⭐ Feature Request
-description: Suggest a feature to improve the app
+name: ⭐ Feature Request / 功能请求
+description: Suggest a feature to improve the app / 建议一个功能来改进应用
 labels: [Feature Request]
 body:
   # Description
   - type: textarea
     id: feature-description
     attributes:
-      label: Describe your suggested feature
-      description: Provide a clear and concise description of the feature you'd like to see.
+      label: Describe your suggested feature / 描述您建议的功能
+      description: Provide a clear and concise description of the feature you'd like to see. / 请清晰简洁地描述您希望看到的功能。
       placeholder: |
         Example:
           "I would like to see..."
+        示例：
+          "我希望看到..."
     validations:
       required: true
 
@@ -18,6 +20,7 @@ body:
   - type: textarea
     id: other-details
     attributes:
-      label: Other details
+      label: Other details / 其他详情
       placeholder: |
         Additional information, comments or screenshots about the feature request.
+        关于功能请求的其他信息、评论或截图。
