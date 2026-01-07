@@ -18,6 +18,7 @@ public sealed partial class MainPageViewModel : BaseViewModel
     private ISessionManager SessionManager { get; } = Ioc.Default.GetRequiredService<ISessionManager>();
     private IUpdateService UpdateService { get; } = Ioc.Default.GetRequiredService<IUpdateService>();
     private IFileTransferService FileTransferService { get; } = Ioc.Default.GetRequiredService<IFileTransferService>();
+    private IMessageHandler MessageHandler { get; } = Ioc.Default.GetRequiredService<IMessageHandler>();
     #endregion
 
     #region Properties
@@ -190,6 +191,15 @@ public sealed partial class MainPageViewModel : BaseViewModel
         
         // 发送媒体控制请求到指定设备
         SessionManager.SendMediaControlRequest(deviceId, action);
+    }
+
+    [RelayCommand]
+    public void StartSftpConnection()
+    {
+        if (Device != null)
+        {
+            MessageHandler.SendSftpCommand(Device, "start");
+        }
     }
 
     #endregion

@@ -335,6 +335,16 @@ public class NetworkService(
             messageType = "DATA_MEDIA_CONTROL";
             logger.LogDebug("识别到 MEDIA_CONTROL 消息类型");
         }
+        else if (message.Contains("DATA_SFTP", StringComparison.OrdinalIgnoreCase))
+        {
+            messageType = "DATA_SFTP";
+            logger.LogDebug("识别到 DATA_SFTP 消息类型");
+        }
+        else if (message.Contains("SftpServerInfo", StringComparison.OrdinalIgnoreCase))
+        {
+            messageType = "DATA_SFTP";
+            logger.LogDebug("识别到 SFTP_SERVER_INFO 消息类型");
+        }
         else
         {
             logger.LogDebug("使用默认 DATA_JSON 消息类型");
@@ -545,14 +555,13 @@ public class NetworkService(
             }
 
             logger.LogWarning("收到意外的预握手消息，来源：{id}，消息：{message}", session.Id, message);
-            // 非握手报文不处理，等待合法握手再次到来
             return;
         }
 
         var parts = message.Split(':');
-        if (parts.Length < 3)
+        if (parts.Length < 6)
         {
-            logger.LogWarning("握手格式无效");
+            logger.LogWarning("握手格式无效，期望至少6个部分");
             SendRaw(session, $"REJECT:{localDeviceId ?? string.Empty}");
             DisconnectSession(session);
             return;
@@ -560,6 +569,9 @@ public class NetworkService(
 
         var remoteDeviceId = parts[1];
         var remotePublicKey = parts[2];
+        var remoteIpAddress = parts[3];
+        var remoteBattery = parts[4];
+        var remoteDeviceType = parts[5];
         var discoveredName = PairedDevices.FirstOrDefault(d => d.Id == remoteDeviceId)?.Name;
 
         if (discoveredName is null)
@@ -568,7 +580,7 @@ public class NetworkService(
             discoveredName = discovery?.DiscoveredDevices.FirstOrDefault(d => d.DeviceId == remoteDeviceId)?.DeviceName;
         }
         var connectedSessionIpAddress = session.Socket.RemoteEndPoint?.ToString()?.Split(':')[0];
-        logger.Info($"收到握手来自 {connectedSessionIpAddress}");
+        logger.Info($"收到握手来自 {connectedSessionIpAddress} (类型: {remoteDeviceType}, 电量: {remoteBattery})");
 
         var device = await deviceManager.VerifyHandshakeAsync(remoteDeviceId, remotePublicKey, discoveredName, connectedSessionIpAddress);
 
@@ -582,6 +594,8 @@ public class NetworkService(
                 connectedDevice.Session = session;
                 connectedDevice.RemotePublicKey = remotePublicKey;
                 connectedDevice.SharedSecret ??= NotifyCryptoHelper.GenerateSharedSecretBytes(localPublicKey ?? string.Empty, remotePublicKey);
+                connectedDevice.RemoteIpAddress = remoteIpAddress;
+                connectedDevice.RemoteDeviceType = remoteDeviceType;
                 deviceManager.ActiveDevice = connectedDevice;
                 connectedDevice.LastHeartbeat = DateTime.UtcNow;
 
@@ -595,7 +609,9 @@ public class NetworkService(
 
             if (localDeviceId is not null && localPublicKey is not null)
             {
-                SendRaw(session, $"ACCEPT:{localDeviceId}:{localPublicKey}");
+                var localBattery = GetLocalBatteryStatus();
+                var localIp = GetLocalIpAddress();
+                SendRaw(session, $"ACCEPT:{localDeviceId}:{localPublicKey}:{localIp}:{localBattery}:pc");
             }
 
             ConnectionStatusChanged?.Invoke(this, (device, true));
@@ -606,6 +622,38 @@ public class NetworkService(
             await Task.Delay(50);
             logger.Info("设备验证失败或被拒绝");
             DisconnectSession(session);
+        }
+    }
+
+    private static string GetLocalBatteryStatus()
+    {
+        try
+        {
+            return "100+";
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+    private static string GetLocalIpAddress()
+    {
+        try
+        {
+            var host = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName());
+            foreach (var ip in host.AddressList)
+            {
+                if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !IPAddress.IsLoopback(ip))
+                {
+                    return ip.ToString();
+                }
+            }
+            return "0.0.0.0";
+        }
+        catch
+        {
+            return "0.0.0.0";
         }
     }
 
@@ -808,6 +856,11 @@ public class NetworkService(
                     // 媒体控制指令
                     await DispatchPayloadAsync(device, decryptedPayload);
                     break;
+                
+                case "DATA_SFTP":
+                    // SFTP 消息
+                    await DispatchPayloadAsync(device, decryptedPayload);
+                    break;
                     
                 default:
                     logger.LogWarning("不支持的 DATA 消息类型: {messageType}", messageType);
@@ -984,43 +1037,74 @@ public class NetworkService(
                 return;
             }
             
-            // 首先尝试处理带type字段的JSON消息
+            // 首先尝试解析JSON
+            JsonDocument doc;
+            JsonElement root;
             try
             {
-                using var doc = JsonDocument.Parse(payload);
-                var root = doc.RootElement;
-                
-                // 检查是否包含type字段
-                if (root.TryGetProperty("type", out var typeProp))
-                {
-                    var messageType = typeProp.GetString();
-                    logger.LogDebug("识别到JSON消息类型：{messageType}");
-                    
-                    // 根据type字段值进行分流处理
-                    switch (messageType)
-                    {
-                        case "APP_LIST_RESPONSE":
-                        case "ICON_RESPONSE":
-                        case "AUDIO_REQUEST":
-                            // Notify-Relay-pc特定消息类型，使用反射调用处理方法
-                            var handleJsonMethod = messageHandler.Value.GetType().GetMethod("HandleJsonMessageAsync", 
-                                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                            if (handleJsonMethod != null)
-                            {
-                                await (Task)handleJsonMethod.Invoke(messageHandler.Value, new object[] { device, payload });
-                            }
-                            return;
-                            
-                        case "MEDIA_CONTROL":
-                            // 媒体控制消息，直接处理
-                            await HandleMediaControlMessageAsync(device, payload);
-                            return;
-                    }
-                }
+                doc = JsonDocument.Parse(payload);
+                root = doc.RootElement;
             }
             catch (JsonException ex)
             {
-                logger.LogDebug("解析JSON消息时出错：{ex.Message}");
+                logger.LogWarning("解析JSON时出错：{ex.Message}");
+                return;
+            }
+            
+            // 检查是否包含type字段
+            if (root.TryGetProperty("type", out var typeProp))
+            {
+                var messageType = typeProp.GetString();
+                logger.LogDebug("识别到JSON消息类型：{messageType}");
+                
+                // 根据type字段值进行分流处理
+                switch (messageType)
+                {
+                    case "APP_LIST_RESPONSE":
+                    case "ICON_RESPONSE":
+                    case "AUDIO_REQUEST":
+                        // Notify-Relay-pc特定消息类型，使用反射调用处理方法
+                        var handleJsonMethod = messageHandler.Value.GetType().GetMethod("HandleJsonMessageAsync", 
+                            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                        if (handleJsonMethod != null)
+                        {
+                            await (Task)handleJsonMethod.Invoke(messageHandler.Value, new object[] { device, payload });
+                        }
+                        return;
+                        
+                    case "MEDIA_CONTROL":
+                        // 媒体控制消息，直接处理
+                        await HandleMediaControlMessageAsync(device, payload);
+                        return;
+                    
+                    case "DATA_SFTP":
+                        // DATA_SFTP消息，使用反射调用处理方法
+                        handleJsonMethod = messageHandler.Value.GetType().GetMethod("HandleJsonMessageAsync", 
+                            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                        if (handleJsonMethod != null)
+                        {
+                            await (Task)handleJsonMethod.Invoke(messageHandler.Value, new object[] { device, payload });
+                        }
+                        return;
+                }
+            }
+            
+            // 检查是否为SFTP响应（没有type字段但有action字段）
+            if (root.TryGetProperty("action", out var actionProp))
+            {
+                var action = actionProp.GetString();
+                if (action is "started" or "stopped" or "error")
+                {
+                    logger.LogDebug("识别到SFTP响应：action={action}", action);
+                    // 直接调用MessageHandler的HandleJsonMessageAsync方法处理SFTP响应
+                    var handleJsonMethod = messageHandler.Value.GetType().GetMethod("HandleJsonMessageAsync", 
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    if (handleJsonMethod != null)
+                    {
+                        await (Task)handleJsonMethod.Invoke(messageHandler.Value, new object[] { device, payload });
+                    }
+                    return;
+                }
             }
 
             // 尝试作为普通SocketMessage处理
@@ -1310,8 +1394,8 @@ public class NetworkService(
             // 获取PC设备电量百分比
             var batteryLevel = GetSystemBatteryLevel(); // 接入系统电量API
             
-            // 心跳格式：HEARTBEAT:<deviceUuid><设备电量%>
-            var payload = $"HEARTBEAT:{localDeviceId}{batteryLevel}";
+            // 心跳格式：HEARTBEAT:<deviceUuid><设备电量%><设备类型>
+            var payload = $"HEARTBEAT:{localDeviceId}{batteryLevel}pc";
             var bytes = Encoding.UTF8.GetBytes(payload);
             const int udpPort = 23334; // 使用与Android端相同的UDP端口
 

@@ -91,6 +91,9 @@ public partial class PairedDevice : ObservableObject
     public byte[]? SharedSecret { get; set; }
     public string? RemotePublicKey { get; set; }
     public DateTime? LastHeartbeat { get; set; }
+    public string? RemoteIpAddress { get; set; }
+    public string? RemoteDeviceType { get; set; }
+    public string? RemoteBattery { get; set; }
 
     private System.Timers.Timer? disconnectDebounceTimer;
     private bool pendingDisconnect;

@@ -1,9 +1,11 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Sefirah.Data.AppDatabase.Models;
 using Sefirah.Data.AppDatabase.Repository;
 using Sefirah.Data.Contracts;
 using Sefirah.Data.Enums;
 using Sefirah.Data.Models;
+using Sefirah.Helpers;
 using Sefirah.Utils;
 
 namespace Sefirah.Services;
@@ -21,6 +23,55 @@ public class MessageHandler(
     IScreenMirrorService screenMirrorService,
     ILogger<MessageHandler> logger) : IMessageHandler
 {
+    private const string DeviceTypeAndroid = "android";
+
+    private static bool IsRemoteDeviceAndroid(PairedDevice? device)
+    {
+        // 允许RemoteDeviceType为null的情况，因为有些Android设备可能没有在握手时正确设置此属性
+        return device != null && (device.RemoteDeviceType?.Equals(DeviceTypeAndroid, StringComparison.OrdinalIgnoreCase) ?? true);
+    }
+
+    /// <summary>
+    /// 发送 SFTP 控制命令到 Android 设备
+    /// </summary>
+    /// <param name="device">目标设备</param>
+    /// <param name="action">操作类型：start 或 stop</param>
+    /// <param name="username">用户名（仅 start 时需要）</param>
+    /// <param name="password">密码（仅 start 时需要）</param>
+    public void SendSftpCommand(PairedDevice device, string action, string? username = null, string? password = null)
+    {
+        if (!IsRemoteDeviceAndroid(device))
+        {
+            logger.LogWarning("SFTP 命令被忽略：非 Android 设备 ({deviceType})", device.RemoteDeviceType);
+            return;
+        }
+
+        try
+        {
+            var json = new JsonObject
+            {
+                ["type"] = "DATA_SFTP",
+                ["action"] = action
+            };
+
+            if (action == "start")
+            {
+                if (!string.IsNullOrEmpty(username))
+                    json["username"] = username;
+                if (!string.IsNullOrEmpty(password))
+                    json["password"] = password;
+            }
+
+            var message = JsonSerializer.Serialize(json);
+            networkService.SendMessage(device.Id, message);
+            logger.LogDebug("已发送 SFTP 命令：action={action}, device={deviceName}", action, device.Name);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "发送 SFTP 命令失败：{deviceName}", device.Name);
+        }
+    }
+
     public async Task HandleMessageAsync(PairedDevice device, SocketMessage message)
     {
         try
@@ -114,15 +165,26 @@ public class MessageHandler(
             using var doc = JsonDocument.Parse(jsonPayload);
             var root = doc.RootElement;
             
+            string messageType = string.Empty;
+            
             // 检查消息类型
-            if (!root.TryGetProperty("type", out var typeProp))
+            if (root.TryGetProperty("type", out var typeProp))
             {
-                logger.LogWarning("JSON 消息缺少 type 属性");
-                return;
+                messageType = typeProp.GetString() ?? string.Empty;
+                logger.LogDebug("识别到 JSON 消息类型：{messageType}", messageType);
             }
             
-            var messageType = typeProp.GetString() ?? string.Empty;
-            logger.LogDebug("识别到 JSON 消息类型：{messageType}", messageType);
+            // 检查是否为SFTP响应（没有type字段但有action字段）
+            if (string.IsNullOrEmpty(messageType) && root.TryGetProperty("action", out var actionProp))
+            {
+                var action = actionProp.GetString();
+                if (action is "started" or "stopped" or "error")
+                {
+                    logger.LogDebug("处理 SFTP 响应：action={action}", action);
+                    await HandleDataSftpAsync(device, root);
+                    return;
+                }
+            }
             
             switch (messageType)
             {
@@ -138,8 +200,19 @@ public class MessageHandler(
                     logger.LogDebug("处理 MEDIA_CONTROL 消息");
                     await HandleMediaControlAsync(device, root);
                     break;
+                case "DATA_SFTP":
+                    logger.LogDebug("处理 DATA_SFTP 消息");
+                    await HandleDataSftpAsync(device, root);
+                    break;
                 default:
-                    logger.LogWarning("不支持的 JSON 消息类型：{messageType}", messageType);
+                    if (!string.IsNullOrEmpty(messageType))
+                    {
+                        logger.LogWarning("不支持的 JSON 消息类型：{messageType}", messageType);
+                    }
+                    else
+                    {
+                        logger.LogWarning("JSON 消息缺少 type 属性且不是 SFTP 响应");
+                    }
                     break;
             }
         }
@@ -388,6 +461,12 @@ public class MessageHandler(
     /// <param name="root">JSON 根元素</param>
     private async Task HandleAudioRequestAsync(PairedDevice device, JsonElement root)
     {
+        if (!IsRemoteDeviceAndroid(device))
+        {
+            logger.LogWarning("音频转发请求被忽略：非 Android 设备 ({deviceType})", device.RemoteDeviceType);
+            return;
+        }
+
         try
         {
             logger.LogDebug("收到音频转发请求，设备：{deviceName}", device.Name);
@@ -415,6 +494,87 @@ public class MessageHandler(
             // 发送拒绝响应，使用新的 MEDIA_CONTROL 格式
             string errorResponse = "{\"type\":\"MEDIA_CONTROL\",\"action\":\"audioResponse\",\"result\":\"rejected\"}";
             networkService.SendMessage(device.Id, errorResponse);
+        }
+    }
+
+    /// <summary>
+    /// 处理 SFTP 消息（DATA_SFTP）
+    /// </summary>
+    /// <param name="device">设备</param>
+    /// <param name="root">JSON 根元素</param>
+    private async Task HandleDataSftpAsync(PairedDevice device, JsonElement root)
+    {
+        try
+        {
+            if (!root.TryGetProperty("action", out var actionProp))
+            {
+                logger.LogWarning("DATA_SFTP 消息缺少 action 属性");
+                return;
+            }
+
+            var action = actionProp.GetString() ?? string.Empty;
+            logger.LogDebug("处理 DATA_SFTP action：{action}", action);
+
+            switch (action)
+            {
+                case "started":
+                    if (!root.TryGetProperty("ipAddress", out var ipProp) ||
+                        !root.TryGetProperty("port", out var portProp) ||
+                        !root.TryGetProperty("username", out var usernameProp) ||
+                        !root.TryGetProperty("password", out var passwordProp))
+                    {
+                        logger.LogWarning("DATA_SFTP started 消息缺少必要属性");
+                        return;
+                    }
+
+                    var receivedUsername = usernameProp.GetString() ?? string.Empty;
+                    var receivedPassword = passwordProp.GetString() ?? string.Empty;
+
+                    if (device.SharedSecret == null)
+                    {
+                        logger.LogWarning("设备 {DeviceId} 没有 sharedSecret，无法验证 SFTP 凭据", device.Id);
+                        return;
+                    }
+
+                    var (expectedUsername, expectedPassword) = NotifyCryptoHelper.DeriveSftpCredentials(device.SharedSecret);
+
+                    if (receivedUsername != expectedUsername || receivedPassword != expectedPassword)
+                    {
+                        logger.LogWarning("SFTP 凭据验证失败：期望 username={ExpectedUsername}, password={ExpectedPassword}，收到 username={ReceivedUsername}",
+                            expectedUsername, expectedPassword, receivedUsername);
+                        return;
+                    }
+
+                    var sftpInfo = new SftpServerInfo
+                    {
+                        IpAddress = ipProp.GetString() ?? string.Empty,
+                        Port = portProp.GetInt32(),
+                        Username = receivedUsername,
+                        Password = receivedPassword
+                    };
+
+                    await sftpService.InitializeAsync(device, sftpInfo);
+                    logger.LogInformation("SFTP 连接已建立（凭据验证通过）：IP={IpAddress}, Port={Port}", sftpInfo.IpAddress, sftpInfo.Port);
+                    break;
+
+                case "stopped":
+                    sftpService.Remove(device.Id);
+                    logger.LogInformation("SFTP 连接已断开：{deviceId}", device.Id);
+                    break;
+
+                case "error":
+                    var errorMessage = root.TryGetProperty("message", out var msgProp) ? msgProp.GetString() : "未知错误";
+                    logger.LogWarning("SFTP 服务器启动失败：{errorMessage}", errorMessage);
+                    break;
+
+                default:
+                    logger.LogWarning("不支持的 DATA_SFTP action：{action}", action);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "处理 DATA_SFTP 消息时出错");
         }
     }
 }

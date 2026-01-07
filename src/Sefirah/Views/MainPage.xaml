@@ -217,6 +217,16 @@
                                 </Button.Flyout>
                             </Button>
 
+                            <!--  SFTP Button  -->
+                            <Button
+                                Padding="5"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Command="{x:Bind ViewModel.StartSftpConnectionCommand}"
+                                ToolTipService.ToolTip="SFTP 连接">
+                                <FontIcon Glyph="&#xE8A5;" />
+                            </Button>
+
                             <!--  Battery status  -->
                             <StackPanel
                                 VerticalAlignment="Center"
