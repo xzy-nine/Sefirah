@@ -198,6 +198,8 @@ public sealed partial class MainPageViewModel : BaseViewModel
     {
         if (Device != null)
         {
+            // 设置手动发送过SFTP请求的标记
+            Device.HasSentSftpRequest = true;
             MessageHandler.SendSftpCommand(Device, "start");
         }
     }

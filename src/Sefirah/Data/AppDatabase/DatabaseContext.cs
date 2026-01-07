@@ -41,6 +41,7 @@ public class DatabaseContext : IDisposable
             var remoteDeviceColumns = db.GetTableInfo(nameof(RemoteDeviceEntity));
             var hasModelColumn = remoteDeviceColumns.Any(col => col.Name.Equals("Model", StringComparison.OrdinalIgnoreCase));
             var hasPublicKeyColumn = remoteDeviceColumns.Any(col => col.Name.Equals("PublicKey", StringComparison.OrdinalIgnoreCase));
+            var hasSentSftpRequestColumn = remoteDeviceColumns.Any(col => col.Name.Equals("HasSentSftpRequest", StringComparison.OrdinalIgnoreCase));
             
             if (!hasModelColumn)
             {
@@ -63,6 +64,18 @@ public class DatabaseContext : IDisposable
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"Migration warning: Could not add PublicKey column: {ex.Message}");
+                }
+            }
+            
+            if (!hasSentSftpRequestColumn)
+            {
+                try
+                {
+                    db.Execute("ALTER TABLE RemoteDeviceEntity ADD COLUMN HasSentSftpRequest INTEGER DEFAULT 0");
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Migration warning: Could not add HasSentSftpRequest column: {ex.Message}");
                 }
             }
         }
