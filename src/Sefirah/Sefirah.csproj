@@ -64,6 +64,7 @@
     <PropertyGroup>
         <UnoIconForegroundFile>Assets\Icons\icon_foreground.svg</UnoIconForegroundFile>
         <UnoIconBackgroundColor Condition="'$(IsWinAppSdk)' == 'true'">Transparent</UnoIconBackgroundColor>
+        <DefaultLanguage>zh-cn</DefaultLanguage>
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(TargetFramework)' == 'net9.0-windows10.0.26100'">

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Package
     xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
     xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
@@ -25,11 +25,11 @@
     xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
     IgnorableNamespaces="uap rescap rescap5 uap3 desktop2 desktop3 desktop4 desktop6 desktop7 cloudfiles cloudfiles2 mp">
     
-    <Identity  Version="2.1.0.0" Name="shrimqy.Seki-PhoneLink" Publisher="CN=BEC0F2AA-07EB-4762-A2FE-13550AF289A5"/>
+    <Identity  Version="1.0.38.0" Name="xzy-nien.NotifyRelay" Publisher="CN=BEC0F2AA-07EB-4762-A2FE-13550AF289A5"/>
     
     <Properties >
-        <DisplayName>Sefirah</DisplayName>
-        <PublisherDisplayName>shrimqy</PublisherDisplayName>
+        <DisplayName>NotifyRelay</DisplayName>
+        <PublisherDisplayName>xzy-nien</PublisherDisplayName>
         <Logo>Assets\AppTiles\StoreLogo.png</Logo>
     </Properties >
 
@@ -46,7 +46,7 @@
         <Application Id="App"
             Executable="$targetnametoken$.exe"
             EntryPoint="$targetentrypoint$">
-            <uap:VisualElements  DisplayName="Sefirah" Description="Connect and sync with your android devices." BackgroundColor="transparent"
+            <uap:VisualElements  DisplayName="NotifyRelay" Description="Connect and sync with your android devices." BackgroundColor="transparent"
 			  Square150x150Logo="Assets\AppTiles\Square150x150Logo.png"
 			  Square44x44Logo="Assets\AppTiles\Square44x44Logo.png">
                 <uap:DefaultTile Wide310x150Logo="Assets\AppTiles\Wide310x150Logo.png"  Square71x71Logo="Assets\AppTiles\SmallTile.png" Square310x310Logo="Assets\AppTiles\LargeTile.png">
