@@ -67,7 +67,7 @@ public sealed partial class MainPageViewModel : BaseViewModel
     {
         get
         {
-            return IsAudioOnlyRunning ? "仅音频播放中" : "未转发音频";
+            return IsAudioOnlyRunning ? "仅音频播放中" : "未转发音频";//TODO 存在问题,图标变了,悬浮文本没变
         }
     }
     #endregion
