@@ -1,7 +1,7 @@
 using Sefirah.Data.Enums;
 
 namespace Sefirah.Data.Models;
-
+//TODO 确定以下功能的使用
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
 [JsonDerivedType(typeof(CommandMessage), typeDiscriminator: "0")]
 [JsonDerivedType(typeof(DeviceInfo), typeDiscriminator: "1")]

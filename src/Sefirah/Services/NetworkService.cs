@@ -208,7 +208,25 @@ public class NetworkService(
                 const int notifyRelayPort = 23333; // 使用与本机相同的端口
                 logger.LogDebug("使用设备IP地址：{ipAddress}:{port}", ipAddress, notifyRelayPort);
                 
-                logger.LogInformation("请求 JSON：{requestJson}", requestJson);
+                // 限制日志长度，特别是base64图片数据
+                string loggableJson = requestJson;
+                try
+                {
+                    // 限制JSON总长度为100个字符
+                    if (loggableJson.Length > 100)
+                    {
+                        loggableJson = loggableJson.Substring(0, 100) + "...";
+                    }
+                }
+                catch
+                {
+                    // 如果处理失败，使用原始JSON的前100个字符
+                    if (requestJson.Length > 100)
+                    {
+                        loggableJson = requestJson.Substring(0, 100) + "...";
+                    }
+                }
+                logger.LogInformation("请求 JSON：{loggableJson}", loggableJson);
                 
                 try
                 {
@@ -222,13 +240,29 @@ public class NetworkService(
                     byte[] messageBytes = Encoding.UTF8.GetBytes(framedMessage);
                     logger.LogDebug("消息字节长度：{length}", messageBytes.Length);
 
-                    // 使用TCP客户端主动连接并发送消息
+                    // 使用TCP客户端主动连接并发送消息，设置较短的超时时间
                     using var tcpClient = new System.Net.Sockets.TcpClient();
+                    tcpClient.ReceiveTimeout = 3000; // 设置接收超时为3秒
+                    tcpClient.SendTimeout = 3000; // 设置发送超时为3秒
+                    
                     logger.LogDebug("正在连接到设备：{ipAddress}:{port}", ipAddress, notifyRelayPort);
-                    await tcpClient.ConnectAsync(ipAddress, notifyRelayPort);
+                    
+                    // 使用带超时的连接方式
+                    var connectTask = tcpClient.ConnectAsync(ipAddress, notifyRelayPort);
+                    var connectResult = await Task.WhenAny(connectTask, Task.Delay(3000));
+                    
+                    if (connectResult != connectTask || !connectTask.IsCompletedSuccessfully)
+                    {
+                        logger.LogWarning("连接设备超时：{ipAddress}:{port}，跳过发送", ipAddress, notifyRelayPort);
+                        return;
+                    }
+                    
                     logger.LogDebug("连接成功");
                     
                     using var networkStream = tcpClient.GetStream();
+                    networkStream.ReadTimeout = 3000; // 设置流接收超时为3秒
+                    networkStream.WriteTimeout = 3000; // 设置流发送超时为3秒
+                    
                     // 发送消息
                     await networkStream.WriteAsync(messageBytes, 0, messageBytes.Length);
                     // 确保数据完全发送
@@ -286,6 +320,18 @@ public class NetworkService(
     /// <param name="mediaInfo">媒体播放信息</param>
     public void SendMediaPlayNotification(string deviceId, NotificationMessage mediaInfo)
     {
+        // 调用重载方法，默认发送全量包
+        SendMediaPlayNotification(deviceId, mediaInfo, "FULL");
+    }
+    
+    /// <summary>
+    /// 发送媒体播放通知
+    /// </summary>
+    /// <param name="deviceId">设备 ID</param>
+    /// <param name="mediaInfo">媒体播放信息</param>
+    /// <param name="mediaType">媒体类型，FULL 表示全量包，DELTA 表示差异包</param>
+    public void SendMediaPlayNotification(string deviceId, NotificationMessage mediaInfo, string mediaType)
+    {
         // 构建媒体播放通知对象，与 Android 端保持一致
         var requestObj = new
         {
@@ -297,7 +343,7 @@ public class NetworkService(
             coverUrl = mediaInfo.CoverUrl,
             time = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
             isLocked = false, // Android端需要的字段，默认设为false
-            mediaType = "FULL" // Android端需要的字段，PC端发送全量包
+            mediaType = mediaType // Android端需要的字段，支持FULL和DELTA
         };
         
         // 序列化为 JSON
