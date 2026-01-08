@@ -1,4 +1,4 @@
-<Page
+﻿<Page
     x:Class="Sefirah.Views.MainPage"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -701,69 +701,6 @@
                                                 Grid.ColumnSpan="2"
                                                 HorizontalAlignment="Stretch"
                                                 Spacing="7">
-
-                                                <!--  Reply Actions Container  -->
-                                                <Grid
-                                                    x:Name="ReplyActionGrid"
-                                                    ColumnSpacing="5"
-                                                    Visibility="{x:Bind ReplyResultKey, Converter={StaticResource EmptyObjectToVisibilityConverter}}">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*" />
-                                                        <ColumnDefinition Width="Auto" />
-                                                    </Grid.ColumnDefinitions>
-
-                                                    <TextBox
-                                                        x:Name="ReplyTextBox"
-                                                        Grid.Column="0"
-                                                        HorizontalAlignment="Stretch"
-                                                        VerticalAlignment="Center"
-                                                        KeyDown="ReplyTextBox_KeyDown"
-                                                        PlaceholderText="{helpers:ResourceString Name=Reply}"
-                                                        Tag="{x:Bind}" />
-
-                                                    <Button
-                                                        x:Name="SendButton"
-                                                        Grid.Column="1"
-                                                        Width="32"
-                                                        Height="32"
-                                                        Padding="0"
-                                                        VerticalAlignment="Center"
-                                                        Background="Transparent"
-                                                        BorderBrush="Transparent"
-                                                        Click="SendButton_Click"
-                                                        Tag="{x:Bind}">
-                                                        <FontIcon Glyph="&#xE724;" />
-                                                    </Button>
-                                                </Grid>
-
-                                                <!--  Non-Reply Actions Container  -->
-                                                <ItemsRepeater
-                                                    x:Name="NonReplyActions"
-                                                    HorizontalAlignment="Stretch"
-                                                    ItemsSource="{x:Bind Actions}">
-
-                                                    <!--  Layout for horizontal alignment  -->
-                                                    <ItemsRepeater.Layout>
-                                                        <StackLayout Orientation="Horizontal" />
-                                                    </ItemsRepeater.Layout>
-
-                                                    <ItemsRepeater.ItemTemplate>
-                                                        <DataTemplate x:DataType="models:NotificationAction">
-                                                            <Button
-                                                                x:Name="ActionButton"
-                                                                Margin="0,0,5,0"
-                                                                Padding="5"
-                                                                HorizontalAlignment="Stretch"
-                                                                HorizontalContentAlignment="Stretch"
-                                                                Background="Transparent"
-                                                                BorderBrush="Transparent"
-                                                                Command="{Binding ViewModel.HandleNotificationActionCommand, ElementName=PageRoot}"
-                                                                CommandParameter="{x:Bind}"
-                                                                Content="{x:Bind Label}"
-                                                                Visibility="{x:Bind IsReplyAction, Converter={StaticResource InverseBooleanToVisibilityConverter}}" />
-                                                        </DataTemplate>
-                                                    </ItemsRepeater.ItemTemplate>
-                                                </ItemsRepeater>
                                             </StackPanel>
                                         </Grid>
                                     </Border>

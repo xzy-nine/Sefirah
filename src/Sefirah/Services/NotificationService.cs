@@ -580,36 +580,6 @@ public class NotificationService(
         });
     }
 
-    public void ProcessReplyAction(PairedDevice device, string notificationKey, string ReplyResultKey, string replyText)
-    {
-        var replyAction = new ReplyAction
-        {
-            NotificationKey = notificationKey,
-            ReplyResultKey = ReplyResultKey,
-            ReplyText = replyText,
-        };
-
-        if (!device.ConnectionStatus) return;
-
-        sessionManager.SendMessage(device.Id, SocketMessageSerializer.Serialize(replyAction));
-        logger.LogDebug("已向设备 {DeviceId} 发送回复动作（通知键：{NotificationKey}）", device.Id, notificationKey);
-    }
-
-    public void ProcessClickAction(PairedDevice device, string notificationKey, int actionIndex)
-    {
-        var notificationAction = new NotificationAction
-        {
-            NotificationKey = notificationKey,
-            ActionIndex = actionIndex,
-            IsReplyAction = false
-        };
-
-        if (!device.ConnectionStatus) return;
-
-        sessionManager.SendMessage(device.Id, SocketMessageSerializer.Serialize(notificationAction));
-        logger.LogDebug("已向设备 {DeviceId} 发送点击动作（通知键：{NotificationKey}）", device.Id, notificationKey);
-    }
-
     private void UpdateActiveNotifications(PairedDevice? activeDevice = null)
     {
         dispatcher.EnqueueAsync(() =>

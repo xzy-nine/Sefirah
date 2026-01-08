@@ -384,12 +384,6 @@ public sealed partial class MainPageViewModel : BaseViewModel
     }
 
     [RelayCommand]
-    public void HandleNotificationAction(NotificationAction action)
-    {
-        NotificationService.ProcessClickAction(Device!, action.NotificationKey, action.ActionIndex);
-    }
-    
-    [RelayCommand]
     public void SendMediaControl(string mediaControlParam)
     {
         if (string.IsNullOrEmpty(mediaControlParam))
@@ -480,11 +474,6 @@ public sealed partial class MainPageViewModel : BaseViewModel
     public void SendFiles(IReadOnlyList<IStorageItem> storageItems)
     {
         FileTransferService.SendFiles(storageItems);
-    }
-
-    public void HandleNotificationReply(Notification notification, string replyText)
-    {
-        NotificationService.ProcessReplyAction(Device!, notification.Key, notification.ReplyResultKey!, replyText);
     }
 
     #endregion

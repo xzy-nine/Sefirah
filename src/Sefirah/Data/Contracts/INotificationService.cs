@@ -34,8 +34,6 @@ public interface INotificationService
     void ClearAllNotifications();
     
     void ClearHistory(PairedDevice device);
-    void ProcessReplyAction(PairedDevice device, string notificationKey, string replyResultKey, string replyText);
-    void ProcessClickAction(PairedDevice device, string notificationKey, int actionIndex);
     void HandleIconResponse(string deviceId, string packageName);
     
     /// <summary>

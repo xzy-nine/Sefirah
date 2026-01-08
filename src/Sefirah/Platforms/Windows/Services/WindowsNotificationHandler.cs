@@ -189,34 +189,6 @@ public class WindowsNotificationHandler(ILogger logger, ISessionManager sessionM
                 logger.LogDebug("未设置图标：通知 {NotificationKey}，包名={AppPackage}，LargeIcon 为空", message.NotificationKey, message.AppPackage);
             }
 
-            // Handle actions
-            foreach (var action in message.Actions)
-            {
-                if (action is null) continue;
-
-                if (action.IsReplyAction)
-                {
-                    builder
-                        .AddTextBox("textBox", "ReplyPlaceholder".GetLocalizedResource(), "")
-                        .AddButton(new AppNotificationButton("SendButton".GetLocalizedResource())
-                            .AddArgument("notificationType", ToastNotificationType.RemoteNotification)
-                            .AddArgument("tag", message.NotificationKey)
-                            .AddArgument("replyResultKey", message.ReplyResultKey)
-                            .AddArgument("action", "Reply")
-                            .AddArgument("deviceId", deviceId)
-                                .SetInputId("textBox"));
-                }
-                else
-                {
-                    builder.AddButton(new AppNotificationButton(action.Label)
-                        .AddArgument("notificationType", ToastNotificationType.RemoteNotification)
-                        .AddArgument("action", "Click")
-                        .AddArgument("actionIndex", action.ActionIndex.ToString())
-                        .AddArgument("tag", message.NotificationKey)
-                        .AddArgument("deviceId", deviceId));
-                }
-            }
-
             var notification = builder.BuildNotification();
             notification.ExpiresOnReboot = true;
             AppNotificationManager.Default.Show(notification);
@@ -473,22 +445,6 @@ public class WindowsNotificationHandler(ILogger logger, ISessionManager sessionM
         var device = deviceManager.FindDeviceById(deviceId);
         if (device is null) return;
 
-        var notificationKey = args.Arguments["tag"];
-        switch (actionType)
-        {
-            case "Reply" when args.UserInput.TryGetValue("textBox", out var replyText):
-                if (args.Arguments.TryGetValue("replyResultKey", out var replyResultKey))
-                {
-                    NotificationActionUtils.ProcessReplyAction(sessionManager, logger, device, notificationKey, replyResultKey, replyText);
-                }
-                break;
-            case "Click":
-                if (args.Arguments.TryGetValue("actionIndex", out var actionIndexStr))
-                {
-                    NotificationActionUtils.ProcessClickAction(sessionManager, logger, device, notificationKey, int.Parse(actionIndexStr));
-                }
-                break;
-        }
     }
 
     /// <inheritdoc />

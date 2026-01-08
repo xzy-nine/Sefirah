@@ -320,17 +320,15 @@ public sealed partial class MainPage : Page
             // Clear the textbox after getting the text
             replyTextBox.Text = string.Empty;
 
-            ViewModel.HandleNotificationReply(notification, replyText);
+
         }
     }
 
     private void ReplyTextBox_KeyDown(object sender, KeyRoutedEventArgs e)
     {
         if (sender is TextBox textBox &&
-            e.Key is VirtualKey.Enter &&
-            textBox.Tag is Notification message)
+            e.Key is VirtualKey.Enter)
         {
-            ViewModel.HandleNotificationReply(message, textBox.Text);
             textBox.Text = string.Empty;
         }
     }

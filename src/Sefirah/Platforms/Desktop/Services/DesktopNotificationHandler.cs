@@ -83,7 +83,7 @@ public class DesktopNotificationHandler(
             hints.Add(soundHint.Key, soundHint.Value);
             hints.Add(soundNameHint.Key, soundNameHint.Value);
 
-            // Prepare actions (exclude reply actions since Linux doesn't support text input)
+            // Prepare actions (no actions supported since NotificationAction has been removed)
             var actions = new List<string>();
             var actionData = new NotificationActionData
             {
@@ -92,22 +92,6 @@ public class DesktopNotificationHandler(
                 NotificationKey = message.NotificationKey,
                 Actions = []
             };
-
-            foreach (var action in message.Actions)
-            {
-                if (action is null || action?.Label is null || action.IsReplyAction) continue; // Skip reply actions
-
-                var actionId = $"action_{action.ActionIndex}";
-                actions.Add(actionId);
-                actions.Add(action.Label);
-
-                actionData.Actions.Add(new NotificationActionInfo
-                {
-                    ActionId = actionId,
-                    ActionIndex = action.ActionIndex,
-                    Label = action.Label
-                });
-            }
 
             var notificationId = await _notifications.NotifyAsync(
                 appName: message.AppName ?? "Sefirah",
@@ -410,11 +394,6 @@ public class DesktopNotificationHandler(
             logger.LogWarning("未找到设备，ID：{DeviceId}", actionData.DeviceId);
             return;
         }
-
-        // Process the click action using the static utility
-        NotificationActionUtils.ProcessClickAction(sessionManager, logger, device, actionData.NotificationKey, action.ActionIndex);
-        logger.LogDebug("已处理远程通知动作：设备 {DeviceId}，动作索引：{ActionIndex}", 
-            actionData.DeviceId, action.ActionIndex);
     }
 
     private async Task HandleClipboardAction(NotificationActionInfo action)

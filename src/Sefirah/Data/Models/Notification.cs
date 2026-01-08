@@ -41,8 +41,7 @@ public partial class Notification : ObservableObject
     public bool HasGroupedMessages => GroupedMessages?.Count > 0;
     public string? Tag { get; set; }
     public string? GroupKey { get; set; }
-    public List<NotificationAction> Actions { get; set; } = [];
-    public string? ReplyResultKey { get; set; }
+    
     
     [ObservableProperty]
     private BitmapImage? icon;
@@ -117,9 +116,7 @@ public partial class Notification : ObservableObject
             Text = message.Text,
             GroupedMessages = GroupBySender(message.Messages),
             Tag = message.Tag,
-            GroupKey = message.GroupKey,
-            Actions = message.Actions.Where(a => a != null).ToList()!,
-            ReplyResultKey = message.ReplyResultKey
+            GroupKey = message.GroupKey
         };
 
         // 设置图标路径，复用应用列表的已有图标

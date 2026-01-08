@@ -36,24 +36,11 @@ namespace Sefirah.Data.Models;
 /// <summary>
 /// 通知消息 - 类型: "4"
 /// 路径: Sefirah.Data.Models.NotificationMessage
-/// 功能: 包含通知的详细信息，如应用名称、标题、内容、操作等
+/// 功能: 包含通知的详细信息，如应用名称、标题、内容等
 /// 处理服务: Sefirah.Services.MessageHandler.HandleMessageAsync → NotificationService.HandleNotificationMessage
 /// </summary>
 [JsonDerivedType(typeof(NotificationMessage), typeDiscriminator: "4")]
-/// <summary>
-/// 通知操作 - 类型: "5"
-/// 路径: Sefirah.Data.Models.NotificationAction
-/// 功能: 用于执行通知上的操作，如点击按钮、回复等
-/// 处理服务: Sefirah.Services.MessageHandler.HandleMessageAsync
-/// </summary>
-[JsonDerivedType(typeof(NotificationAction), typeDiscriminator: "5")]
-/// <summary>
-/// 回复操作 - 类型: "6"
-/// 路径: Sefirah.Data.Models.ReplyAction
-/// 功能: 用于回复通知消息
-/// 处理服务: Sefirah.Services.MessageHandler.HandleMessageAsync
-/// </summary>
-[JsonDerivedType(typeof(ReplyAction), typeDiscriminator: "6")]
+
 /// <summary>
 /// 媒体播放会话 - 类型: "7"
 /// 路径: Sefirah.Data.Models.PlaybackSession
@@ -228,12 +215,6 @@ public class NotificationMessage : SocketMessage
     [JsonPropertyName("groupKey")]
     public string? GroupKey { get; set; }
 
-    [JsonPropertyName("actions")]
-    public List<NotificationAction?> Actions { get; set; } = [];
-
-    [JsonPropertyName("replyResultKey")]
-    public string? ReplyResultKey { get; set; }
-
     [JsonPropertyName("appIcon")]
     public string? AppIcon { get; set; }
 
@@ -247,44 +228,9 @@ public class NotificationMessage : SocketMessage
     public string? CoverUrl { get; set; }
 }
 
-/// <summary>
-/// 回复操作类
-/// 路径: Sefirah.Data.Models.ReplyAction
-/// 功能: 用于回复通知消息，包含回复文本和相关密钥
-/// 处理服务: Sefirah.Services.MessageHandler.HandleMessageAsync
-/// </summary>
-public class ReplyAction : SocketMessage
-{
-    [JsonPropertyName("notificationKey")]
-    public required string NotificationKey { get; set; }
 
-    [JsonPropertyName("replyResultKey")]
-    public required string ReplyResultKey { get; set; }
 
-    [JsonPropertyName("replyText")]
-    public required string ReplyText { get; set; }
-}
 
-/// <summary>
-/// 通知操作类
-/// 路径: Sefirah.Data.Models.NotificationAction
-/// 功能: 用于执行通知上的操作，如点击按钮、回复等
-/// 处理服务: Sefirah.Services.MessageHandler.HandleMessageAsync
-/// </summary>
-public class NotificationAction : SocketMessage
-{
-    [JsonPropertyName("notificationKey")]
-    public required string NotificationKey { get; set; }
-
-    [JsonPropertyName("label")]
-    public string? Label { get; set; } = string.Empty;
-
-    [JsonPropertyName("actionIndex")]
-    public required int ActionIndex { get; set; }
-
-    [JsonPropertyName("isReplyAction")]
-    public bool IsReplyAction { get; set; }
-}
 
 /// <summary>
 /// 通知文本消息类
