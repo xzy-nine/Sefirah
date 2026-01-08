@@ -500,7 +500,7 @@ public class NetworkService(
     {
         if (!message.StartsWith("HANDSHAKE:"))
         {
-            if (message.StartsWith("DATA_") || message.StartsWith("HEARTBEAT:"))
+            if (message.StartsWith("DATA_"))
             {
                 var attachedDevice = await TryAttachExistingDeviceSessionAsync(session, message);
                 if (attachedDevice is not null)
@@ -621,23 +621,56 @@ public class NetworkService(
             if (message.StartsWith("HEARTBEAT:"))
             {
                 // 处理心跳包
-                // 心跳格式：HEARTBEAT:<deviceUuid><设备电量%>
-                // UUID固定为36个字符（8-4-4-4-12格式），电量在UUID后直接拼接
+                // 心跳格式：HEARTBEAT:<deviceUuid><<+/->设备电量%>,<设备类型>
+                // UUID固定为36个字符（8-4-4-4-12格式）
                 const string heartbeatPrefix = "HEARTBEAT:";
                 if (message.Length > heartbeatPrefix.Length + 36)
                 {
-                    // 提取电量信息
-                    var batteryStr = message.Substring(heartbeatPrefix.Length + 36);
+                    // 提取设备UUID
+                    var deviceUuid = message.Substring(heartbeatPrefix.Length, 36);
+                    
+                    // 提取剩余部分
+                    var suffix = message.Substring(heartbeatPrefix.Length + 36);
+                    
+                    // 解析充电状态、电量和设备类型
                     var batteryLevel = 0;
-                    if (int.TryParse(batteryStr, out var parsedBattery))
+                    var isCharging = false;
+                    var deviceType = "unknown";
+                    
+                    try
                     {
-                        batteryLevel = Math.Clamp(parsedBattery, 0, 100);
+                        // 提取充电符号
+                        if (suffix.Length > 0)
+                        {
+                            var chargeSign = suffix[0];
+                            isCharging = chargeSign == '+';
+                            
+                            // 查找逗号位置
+                            var commaIndex = suffix.IndexOf(',');
+                            if (commaIndex > 0)
+                            {
+                                // 提取电量部分
+                                var batteryPart = suffix.Substring(1, commaIndex - 1);
+                                if (int.TryParse(batteryPart, out var parsedBattery))
+                                {
+                                    batteryLevel = Math.Clamp(parsedBattery, 0, 100);
+                                }
+                                
+                                // 提取设备类型
+                                deviceType = suffix.Substring(commaIndex + 1);
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning("解析心跳包失败：{ex}", ex);
                     }
                     
                     // 更新设备状态
                     var deviceStatus = new DeviceStatus
                     {
-                        BatteryStatus = batteryLevel
+                        BatteryStatus = batteryLevel,
+                        ChargingStatus = isCharging
                     };
                     
                     // 调用设备管理器更新设备状态
@@ -924,27 +957,11 @@ public class NetworkService(
             string remoteDeviceId;
             string remotePublicKey = string.Empty;
             
-            if (message.StartsWith("HEARTBEAT:"))
-            {
-                // 处理新的心跳格式：HEARTBEAT:<deviceUuid><设备电量%>
-                const string heartbeatPrefix = "HEARTBEAT:";
-                if (message.Length > heartbeatPrefix.Length + 36)
-                {
-                    remoteDeviceId = message.Substring(heartbeatPrefix.Length, 36);
-                }
-                else
-                {
-                    return null;
-                }
-            }
-            else
-            {
-                // 处理其他格式
-                var parts = message.Split(':');
-                if (parts.Length < 3) return null;
-                remoteDeviceId = parts[1];
-                remotePublicKey = parts[2];
-            }
+            // 处理其他格式
+            var parts = message.Split(':');
+            if (parts.Length < 3) return null;
+            remoteDeviceId = parts[1];
+            remotePublicKey = parts[2];
 
             var device = PairedDevices.FirstOrDefault(d => d.Id == remoteDeviceId);
             if (device is null) return null;
@@ -1353,6 +1370,45 @@ public class NetworkService(
         }
     }
 
+    /// <summary>
+    /// 获取系统充电状态
+    /// </summary>
+    private bool GetSystemChargingStatus()
+    {
+        try
+        {
+            // 使用Windows API的GetSystemPowerStatus获取充电状态
+            SYSTEM_POWER_STATUS powerStatus = new SYSTEM_POWER_STATUS();
+            if (GetSystemPowerStatus(ref powerStatus))
+            {
+                // 如果交流电源连接或电池正在充电，则返回true
+                return powerStatus.ACLineStatus == 1 || powerStatus.BatteryFlag == 8;
+            }
+            return false;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning("获取系统充电状态失败：{ex}", ex);
+            // 异常情况下返回默认值false
+            return false;
+        }
+    }
+    
+    // Windows API结构体和函数声明
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct SYSTEM_POWER_STATUS
+    {
+        public byte ACLineStatus;          // AC电源状态：0=离线，1=在线，255=未知
+        public byte BatteryFlag;           // 电池状态：1=高，2=低，4=临界，8=充电，128=无电池
+        public byte BatteryLifePercent;    // 电池剩余百分比：0-100，255=未知
+        public byte Reserved1;             // 保留
+        public uint BatteryLifeTime;       // 电池剩余时间（秒），0xFFFFFFFF=未知
+        public uint BatteryFullLifeTime;   // 电池满电时间（秒），0xFFFFFFFF=未知
+    }
+    
+    [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+    private static extern bool GetSystemPowerStatus(ref SYSTEM_POWER_STATUS lpSystemPowerStatus);
+
     private void StartHeartbeat()
     {
         heartbeatTimer ??= new Timer(_ => HeartbeatTick(), null, heartbeatInterval, heartbeatInterval);
@@ -1364,11 +1420,13 @@ public class NetworkService(
         {
             if (localDeviceId is null) return;
 
-            // 获取PC设备电量百分比
+            // 获取PC设备电量百分比和充电状态
             var batteryLevel = GetSystemBatteryLevel(); // 接入系统电量API
+            var isCharging = GetSystemChargingStatus(); // 获取充电状态
+            var chargeSign = isCharging ? "+" : "-";
             
-            // 心跳格式：HEARTBEAT:<deviceUuid><设备电量%><设备类型>
-            var payload = $"HEARTBEAT:{localDeviceId}{batteryLevel}pc";
+            // 心跳格式：HEARTBEAT:<deviceUuid><<+/->设备电量%>,<设备类型>
+            var payload = $"HEARTBEAT:{localDeviceId}{chargeSign}{batteryLevel},pc";
             var bytes = Encoding.UTF8.GetBytes(payload);
             const int udpPort = 23334; // 使用与Android端相同的UDP端口
 
