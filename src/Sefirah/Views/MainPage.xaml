@@ -559,14 +559,6 @@
                                                             <Button.Flyout>
                                                                 <MenuFlyout Closed="MoreButtonFlyoutClosed" Placement="BottomEdgeAlignedLeft">
                                                                     <MenuFlyoutItem
-                                                                        Click="OpenAppClick"
-                                                                        DataContext="{x:Bind}"
-                                                                        Text="{helpers:ResourceString Name=OpenApp}">
-                                                                        <MenuFlyoutItem.Icon>
-                                                                            <FontIcon Glyph="&#xED35;" />
-                                                                        </MenuFlyoutItem.Icon>
-                                                                    </MenuFlyoutItem>
-                                                                    <MenuFlyoutItem
                                                                         Click="UpdateNotificationFilterClick"
                                                                         Tag="{x:Bind AppPackage}"
                                                                         Text="{x:Bind FlyoutFilterString}">
