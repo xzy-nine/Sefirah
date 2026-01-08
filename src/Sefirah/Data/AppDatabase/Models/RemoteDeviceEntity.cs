@@ -23,6 +23,8 @@ public partial class RemoteDeviceEntity
 
     public DateTime? LastConnected { get; set; }
 
+    public bool HasSentSftpRequest { get; set; } = false;
+
     [Column("IpAddresses")]
     public string? IpAddressesJson { get; set; }
     
@@ -55,6 +57,7 @@ public partial class RemoteDeviceEntity
             Wallpaper = await ImageHelper.ToBitmapAsync(WallpaperBytes),
             SharedSecret = SharedSecret,
             RemotePublicKey = PublicKey,
+            HasSentSftpRequest = HasSentSftpRequest,
         };
     }
     #endregion

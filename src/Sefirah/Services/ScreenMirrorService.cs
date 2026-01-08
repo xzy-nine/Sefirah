@@ -1,4 +1,5 @@
 using System.Text;
+using System.Linq;
 using CommunityToolkit.WinUI;
 using Sefirah.Data.Contracts;
 using Sefirah.Data.Enums;
@@ -15,11 +16,13 @@ public class ScreenMirrorService(
     ILogger<ScreenMirrorService> logger,
     IUserSettingsService userSettingsService,
     IAdbService adbService
-) : IScreenMirrorService
+) : IScreenMirrorService, IDisposable
 {
     private readonly ObservableCollection<AdbDevice> devices = adbService.AdbDevices;
 
     private Dictionary<string, Process> scrcpyProcesses = [];
+    private Dictionary<string, bool> deviceIdToAudioOnlyMap = [];
+    private Dictionary<string, string> deviceIdToSerialMap = [];
     private CancellationTokenSource? cts;
     private readonly Microsoft.UI.Dispatching.DispatcherQueue? dispatcher = App.MainWindow?.DispatcherQueue;
     
@@ -292,6 +295,10 @@ public class ScreenMirrorService(
             var isAudioOnly = deviceSettings.DisableVideoForwarding || 
                               (customArgs?.Contains("--no-video") ?? false) || 
                               args.Contains("--no-video");
+            // 存储设备ID到序列号的映射
+            deviceIdToSerialMap[device.Id] = deviceSerial;
+            // 存储设备ID到仅音频模式的映射
+            deviceIdToAudioOnlyMap[device.Id] = isAudioOnly;
             await StartProcessMonitoring(process, processCts, deviceSerial, device.Name, isAudioOnly);
             return true;
         }
@@ -348,7 +355,11 @@ public class ScreenMirrorService(
                 await process.WaitForExitAsync(processCts.Token);
                 logger.LogInformation("scrcpy 进程退出，代码：{exitCode}", process.ExitCode);
                 
-                if (process.ExitCode != 0 && process.ExitCode != 2)
+                // 仅当退出码不是0、2或-1时显示错误
+                // 0: 正常退出
+                // 2: 用户主动关闭窗口
+                // -1: 显式终止进程（如我们调用Kill()时）
+                if (process.ExitCode != 0 && process.ExitCode != 2 && process.ExitCode != -1)
                 {
                     string errorMessage;
                     lock (errorOutput)
@@ -403,6 +414,14 @@ public class ScreenMirrorService(
             {
                 process.Dispose();
                 scrcpyProcesses.Remove(deviceSerial);
+                // 移除设备ID到序列号的映射
+                var deviceId = deviceIdToSerialMap.FirstOrDefault(x => x.Value == deviceSerial).Key;
+                if (deviceId != null)
+                {
+                    deviceIdToSerialMap.Remove(deviceId);
+                    // 移除设备ID到仅音频模式的映射
+                    deviceIdToAudioOnlyMap.Remove(deviceId);
+                }
 
                 processCts.Dispose();
                 if (ReferenceEquals(cts, processCts))
@@ -477,7 +496,45 @@ public class ScreenMirrorService(
 
     private (string, string) BuildScrcpyArguments(List<string> args, string deviceSerial, IDeviceSettingsService settings)
     {
+        // Check if this is audio-only mode (either from settings or custom args)
+        var isAudioOnlyMode = settings.DisableVideoForwarding || args.Any(arg => arg.Contains("--no-video"));
+        
+        if (isAudioOnlyMode)
+        {
+            // For audio-only mode, build minimal command
+            // Note: Audio is enabled by default, so we don't need to add --audio explicitly
+            var audioOnlyArgs = new List<string>
+            {
+                $"-s {deviceSerial}",
+                "--no-video",
+                "--audio-source=playback",
+                "--audio-dup"
+            };
+            
+            // Add optional audio settings
+            if (!string.IsNullOrEmpty(settings.AudioBitrate))
+            {
+                audioOnlyArgs.Add($"--audio-bit-rate={settings.AudioBitrate}");
+            }
 
+            if (!string.IsNullOrEmpty(settings.AudioBuffer))
+            {
+                audioOnlyArgs.Add($"--audio-buffer={settings.AudioBuffer}");
+            }
+
+            if (!string.IsNullOrEmpty(settings.AudioOutputBuffer))
+            {
+                audioOnlyArgs.Add($"--audio-output-buffer={settings.AudioOutputBuffer}");
+            }
+            
+            // Join and log the final command for debugging
+            var finalArgs = string.Join(" ", audioOnlyArgs);
+            logger.LogDebug("[调试] 仅音频模式 scrcpy 命令：{FinalArgs}", finalArgs);
+            
+            return (finalArgs, deviceSerial);
+        }
+        
+        // Normal mode - use all settings
         var preDefinedArgs = settings.CustomArguments;
 
         if (!string.IsNullOrEmpty(preDefinedArgs))
@@ -497,11 +554,6 @@ public class ScreenMirrorService(
         }
         
         // Video settings
-        if (settings.DisableVideoForwarding)
-        {
-            args.Add("--no-video");
-        }
-
         if (settings.VideoCodec != 0)
         {
             args.Add($"{adbService.VideoCodecOptions[settings.VideoCodec].Command}");
@@ -666,5 +718,63 @@ public class ScreenMirrorService(
     private void CachePassword(string deviceId, string password, int timeoutMinutes)
     {
         passwordCache[deviceId] = (password, DateTime.Now, timeoutMinutes);
+    }
+
+    public void StopScrcpy(string deviceSerial)
+    {
+        if (scrcpyProcesses.TryGetValue(deviceSerial, out var process))
+        {
+            try
+            {
+                if (!process.HasExited)
+                {
+                    process.Kill();
+                }
+                scrcpyProcesses.Remove(deviceSerial);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError($"停止 scrcpy 进程失败：{ex.Message}", ex);
+            }
+        }
+    }
+
+    public void StopScrcpyByDeviceId(string deviceId)
+    {
+        if (deviceIdToSerialMap.TryGetValue(deviceId, out var deviceSerial))
+        {
+            StopScrcpy(deviceSerial);
+        }
+    }
+
+    public bool IsAudioOnlyRunning(string deviceId)
+    {
+        // 检查设备是否有仅音频模式的scrcpy进程运行
+        return deviceIdToAudioOnlyMap.TryGetValue(deviceId, out var isAudioOnly) && 
+               isAudioOnly && 
+               deviceIdToSerialMap.TryGetValue(deviceId, out var deviceSerial) && 
+               scrcpyProcesses.TryGetValue(deviceSerial, out var process) && 
+               !process.HasExited;
+    }
+
+    public void Dispose()
+    {
+        foreach (var kvp in scrcpyProcesses.ToList())
+        {
+            try
+            {
+                if (!kvp.Value.HasExited)
+                {
+                    kvp.Value.Kill();
+                }
+                kvp.Value.Dispose();
+            }
+            catch (Exception ex)
+            {
+                logger.LogError($"释放 scrcpy 进程失败：{ex.Message}", ex);
+            }
+        }
+        scrcpyProcesses.Clear();
+        cts?.Dispose();
     }
 }

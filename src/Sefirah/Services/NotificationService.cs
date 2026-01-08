@@ -260,7 +260,7 @@ public class NotificationService(
                                     message.GroupKey = contentMatchNotification.GroupKey;
                                     
                                     // 只更新本地存储，不发送到Windows通知中心
-                                    logger.LogDebug("相同内容的通知已存在，仅存储不发送到Windows通知中心");
+
                                 }
                                 else
                                 {

@@ -151,4 +151,40 @@ public static class NotifyCryptoHelper
         using var sha256 = SHA256.Create();
         return sha256.ComputeHash(sharedSecret);
     }
+
+    public static (string Username, string Password) DeriveSftpCredentials(byte[] sharedSecret)
+    {
+        const string usernamePrefix = "sftp_";
+        const int passwordLength = 32;
+
+        using var sha256 = SHA256.Create();
+        var derived = sha256.ComputeHash(sharedSecret);
+
+        var usernameBytes = derived.Take(8).ToArray();
+        var username = Convert.ToBase64String(usernameBytes)
+            .Replace("+", "-")
+            .Replace("/", "_")
+            .Replace("=", "");
+        // 移除所有非字母数字字符，与Android端保持一致
+        username = System.Text.RegularExpressions.Regex.Replace(username, "[^a-zA-Z0-9]", string.Empty)
+            .ToLowerInvariant();
+        username = usernamePrefix + username[..Math.Min(16, username.Length)];
+
+        var passwordBytes = derived.Take(passwordLength).ToArray();
+        var password = Convert.ToBase64String(passwordBytes)
+            .Replace("+", "-")
+            .Replace("/", "_")
+            .Replace("=", "");
+        // 移除所有非字母数字字符，与Android端保持一致
+        password = System.Text.RegularExpressions.Regex.Replace(password, "[^a-zA-Z0-9]", string.Empty);
+
+        return (username, password);
+    }
+
+    public static string DerivePasswordHash(string password)
+    {
+        using var md5 = MD5.Create();
+        var hash = md5.ComputeHash(Encoding.UTF8.GetBytes(password));
+        return Convert.ToBase64String(hash);
+    }
 }

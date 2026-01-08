@@ -18,6 +18,7 @@ public sealed partial class MainPageViewModel : BaseViewModel
     private ISessionManager SessionManager { get; } = Ioc.Default.GetRequiredService<ISessionManager>();
     private IUpdateService UpdateService { get; } = Ioc.Default.GetRequiredService<IUpdateService>();
     private IFileTransferService FileTransferService { get; } = Ioc.Default.GetRequiredService<IFileTransferService>();
+    private IMessageHandler MessageHandler { get; } = Ioc.Default.GetRequiredService<IMessageHandler>();
     #endregion
 
     #region Properties
@@ -34,10 +35,152 @@ public sealed partial class MainPageViewModel : BaseViewModel
     public partial bool LoadingScrcpy { get; set; } = false;
 
     public bool IsUpdateAvailable => UpdateService.IsUpdateAvailable;
+    
+    /// <summary>
+    /// 当前设备是否正在运行仅音频模式的 scrcpy
+    /// </summary>
+    public bool IsAudioOnlyRunning
+    {
+        get
+        {
+            if (Device == null)
+                return false;
+            return ScreenMirrorService.IsAudioOnlyRunning(Device.Id);
+        }
+    }
+    
+    /// <summary>
+    /// 获取当前音频状态的图标
+    /// </summary>
+    public string AudioStatusIcon
+    {
+        get
+        {
+            return IsAudioOnlyRunning ? "\uE995" : "\uE74F";
+        }
+    }
+    
+    /// <summary>
+    /// 获取当前音频状态的文本描述
+    /// </summary>
+    public string AudioStatusText
+    {
+        get
+        {
+            return IsAudioOnlyRunning ? "仅音频播放中" : "未转发音频";
+        }
+    }
+
+    /// <summary>
+    /// 获取所有连接的ADB设备类型
+    /// </summary>
+    public List<string> AdbConnectionTypes
+    {
+        get
+        {
+            var connectionTypes = new List<string>();
+            
+            if (Device == null || !Device.HasAdbConnection || Device.ConnectedAdbDevices.Count == 0)
+            {
+                return connectionTypes;
+            }
+            
+            // 检查所有连接的ADB设备，添加所有连接类型
+            if (Device.ConnectedAdbDevices.Any(d => d.Type == Sefirah.Data.Enums.DeviceType.USB))
+            {
+                connectionTypes.Add("USB");
+            }
+            
+            if (Device.ConnectedAdbDevices.Any(d => d.Type == Sefirah.Data.Enums.DeviceType.WIFI))
+            {
+                connectionTypes.Add("WiFi");
+            }
+            
+            return connectionTypes;
+        }
+    }
+
+    /// <summary>
+    /// 获取ADB设备的详细信息，用于悬浮提示
+    /// </summary>
+    public string AdbDeviceInfo
+    {
+        get
+        {
+            var deviceInfo = new List<string>();
+            
+            // 设备名称
+            if (!string.IsNullOrEmpty(Device?.Name))
+            {
+                deviceInfo.Add(Device.Name);
+            }
+            
+            // 设备型号
+            if (!string.IsNullOrEmpty(Device?.Model))
+            {
+                deviceInfo.Add(Device.Model);
+            }
+            
+            // IP地址
+            if (Device?.IpAddresses != null && Device.IpAddresses.Count > 0)
+            {
+                deviceInfo.Add(string.Join(", ", Device.IpAddresses));
+            }
+            
+            // 确保至少返回一个默认值，便于调试
+            if (deviceInfo.Count == 0)
+            {
+                deviceInfo.Add("设备信息不可用");
+                if (Device == null)
+                {
+                    deviceInfo.Add("Device为null");
+                }
+                else if (Device.ConnectedAdbDevices.Count == 0)
+                {
+                    deviceInfo.Add("ConnectedAdbDevices为空");
+                }
+            }
+            
+            return string.Join("\n", deviceInfo);
+        }
+    }
+
+    /// <summary>
+    /// 获取所有连接的ADB设备图标
+    /// </summary>
+    public List<string> AdbStatusIcons
+    {
+        get
+        {
+            var icons = new List<string>();
+            
+            if (Device == null || !Device.HasAdbConnection || Device.ConnectedAdbDevices.Count == 0)
+            {
+                return icons;
+            }
+            
+            // 添加USB图标
+            if (Device.ConnectedAdbDevices.Any(d => d.Type == Sefirah.Data.Enums.DeviceType.USB))
+            {
+                icons.Add("\uE89E"); // USB图标
+            }
+            
+            // 添加WiFi图标
+            if (Device.ConnectedAdbDevices.Any(d => d.Type == Sefirah.Data.Enums.DeviceType.WIFI))
+            {
+                icons.Add("\uE927"); // WiFi图标
+            }
+            
+            return icons;
+        }
+    }
     #endregion
 
     public MainPageViewModel()
     {
+        // 用于存储之前的设备，以便移除事件监听
+        PairedDevice? previousDevice = null;
+        
         // 当 DeviceManager.ActiveDevice 变化时，让 x:Bind 的 Device 属性重新求值
         if (DeviceManager is INotifyPropertyChanged npc)
         {
@@ -45,7 +188,34 @@ public sealed partial class MainPageViewModel : BaseViewModel
             {
                 if (e.PropertyName == nameof(IDeviceManager.ActiveDevice))
                 {
+                    // 移除之前设备的事件监听
+                    if (previousDevice is INotifyPropertyChanged prevNpc)
+                    {
+                        prevNpc.PropertyChanged -= OnDevicePropertyChanged;
+                    }
+                    if (previousDevice != null)
+                    {
+                        previousDevice.ConnectedAdbDevices.CollectionChanged -= OnAdbDevicesCollectionChanged;
+                    }
+                    
                     OnPropertyChanged(nameof(Device));
+                    OnPropertyChanged(nameof(IsAudioOnlyRunning));
+                    OnPropertyChanged(nameof(AudioStatusIcon));
+                    OnPropertyChanged(nameof(AudioStatusText));
+                    OnPropertyChanged(nameof(AdbConnectionTypes));
+                    OnPropertyChanged(nameof(AdbStatusIcons));
+                    OnPropertyChanged(nameof(AdbDeviceInfo));
+                    
+                    // 添加新设备的事件监听
+                    previousDevice = Device;
+                    if (previousDevice is INotifyPropertyChanged newNpc)
+                    {
+                        newNpc.PropertyChanged += OnDevicePropertyChanged;
+                    }
+                    if (previousDevice != null)
+                    {
+                        previousDevice.ConnectedAdbDevices.CollectionChanged += OnAdbDevicesCollectionChanged;
+                    }
                 }
             };
         }
@@ -61,6 +231,42 @@ public sealed partial class MainPageViewModel : BaseViewModel
                 }
             };
         }
+    }
+    
+    /// <summary>
+    /// 手动刷新音频状态属性，用于UI更新
+    /// </summary>
+    public void RefreshAudioStatus()
+    {
+        OnPropertyChanged(nameof(IsAudioOnlyRunning));
+        OnPropertyChanged(nameof(AudioStatusIcon));
+        OnPropertyChanged(nameof(AudioStatusText));
+    }
+
+    /// <summary>
+    /// 设备属性变化时的事件处理方法
+    /// </summary>
+    private void OnDevicePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(PairedDevice.HasAdbConnection) || 
+            e.PropertyName == nameof(PairedDevice.Name) || 
+            e.PropertyName == nameof(PairedDevice.Model) || 
+            e.PropertyName == nameof(PairedDevice.IpAddresses))
+        {
+            OnPropertyChanged(nameof(AdbConnectionTypes));
+            OnPropertyChanged(nameof(AdbStatusIcons));
+            OnPropertyChanged(nameof(AdbDeviceInfo));
+        }
+    }
+
+    /// <summary>
+    /// ADB设备集合变化时的事件处理方法
+    /// </summary>
+    private void OnAdbDevicesCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(AdbConnectionTypes));
+        OnPropertyChanged(nameof(AdbStatusIcons));
+        OnPropertyChanged(nameof(AdbDeviceInfo));
     }
 
     /// <summary>
@@ -137,12 +343,25 @@ public sealed partial class MainPageViewModel : BaseViewModel
     }
 
     [RelayCommand]
-    public void SetRingerMode(string? modeStr)
+    public async void SetRingerMode(string? modeStr)
     {
         if (int.TryParse(modeStr, out int mode))
         {
-            var message = new DeviceRingerMode { RingerMode = mode };
-            SessionManager.SendMessage(Device!.Id, SocketMessageSerializer.Serialize(message));
+            // 模式2：仅音频播放中，模式0：未转发音频
+            if (mode == 2)
+            {
+                // 启动仅音频模式的 scrcpy
+                await ScreenMirrorService.StartScrcpy(Device!, "--no-video");
+            }
+            else if (mode == 0)
+            {
+                // 停止 scrcpy 进程
+                ScreenMirrorService.StopScrcpyByDeviceId(Device!.Id);
+            }
+            // 不再发送铃声模式消息到设备
+            
+            // 刷新音频状态属性，更新UI
+            RefreshAudioStatus();
         }
     }
 
@@ -190,6 +409,17 @@ public sealed partial class MainPageViewModel : BaseViewModel
         
         // 发送媒体控制请求到指定设备
         SessionManager.SendMediaControlRequest(deviceId, action);
+    }
+
+    [RelayCommand]
+    public void StartSftpConnection()
+    {
+        if (Device != null)
+        {
+            // 设置手动发送过SFTP请求的标记
+            Device.HasSentSftpRequest = true;
+            MessageHandler.SendSftpCommand(Device, "start");
+        }
     }
 
     #endregion

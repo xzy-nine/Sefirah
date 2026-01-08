@@ -312,7 +312,7 @@ public class DiscoveryService(
             // 处理心跳消息
             if (message.StartsWith("HEARTBEAT:"))
             {
-                logger.LogDebug("收到 UDP 心跳消息: {message} 来自 {endpoint}");
+                //logger.LogDebug("收到 UDP 心跳消息: {message} 来自 {endpoint}");
                 
                 // 心跳格式：HEARTBEAT:<deviceUuid><设备电量%>
                 const string heartbeatPrefix = "HEARTBEAT:";

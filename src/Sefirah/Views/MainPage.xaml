@@ -11,6 +11,7 @@
     xmlns:not_win="http://uno.ui/not_win"
     xmlns:userControls="using:Sefirah.UserControls"
     xmlns:utu="using:Uno.Toolkit.UI"
+    xmlns:viewmodels="using:Sefirah.ViewModels"
     xmlns:win="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     Background="{ThemeResource App.PageBackgroundBrush}"
     mc:Ignorable="not_win"
@@ -37,6 +38,7 @@
         <converters:EmptyObjectToVisibilityConverter x:Key="EmptyObjectToVisibilityConverter" />
         <converters:EmptyObjectToVisibilityConverter x:Key="InverseEmptyObjectToVisibilityConverter" Inverse="True" />
         <converters:StringToImageSourceConverter x:Key="StringToImageSourceConverter" />
+        <converters:AdbIconToTypeConverter x:Key="AdbIconToTypeConverter" />
 
         <!-- Phone Frame Overlay Animations -->
         <Storyboard x:Key="FadeInAnimation" x:Name="FadeInStoryboard">
@@ -186,35 +188,40 @@
                                 Padding="5"
                                 Background="Transparent"
                                 BorderThickness="0">
-                                <FontIcon Glyph="{x:Bind ViewModel.Device.Status.RingerMode, Converter={StaticResource RingerModeToIconConverter}, Mode=OneWay}" />
+                                <FontIcon Glyph="{x:Bind ViewModel.AudioStatusIcon, Mode=OneWay}" />
+                                <ToolTipService.ToolTip>
+                                    <ToolTip Content="{x:Bind ViewModel.AudioStatusText, Mode=OneWay}" />
+                                </ToolTipService.ToolTip>
                                 <Button.Flyout>
                                     <MenuFlyout>
                                         <MenuFlyoutItem
                                             Command="{x:Bind ViewModel.SetRingerModeCommand}"
                                             CommandParameter="2"
-                                            Text="{helpers:ResourceString Name=RingerModeNormal/Content}">
+                                            Text="仅音频播放中">
                                             <MenuFlyoutItem.Icon>
                                                 <FontIcon Glyph="&#xE995;" />
                                             </MenuFlyoutItem.Icon>
                                         </MenuFlyoutItem>
                                         <MenuFlyoutItem
                                             Command="{x:Bind ViewModel.SetRingerModeCommand}"
-                                            CommandParameter="1"
-                                            Text="{helpers:ResourceString Name=RingerModeVibrate/Content}">
-                                            <MenuFlyoutItem.Icon>
-                                                <FontIcon Glyph="&#xE877;" />
-                                            </MenuFlyoutItem.Icon>
-                                        </MenuFlyoutItem>
-                                        <MenuFlyoutItem
-                                            Command="{x:Bind ViewModel.SetRingerModeCommand}"
                                             CommandParameter="0"
-                                            Text="{helpers:ResourceString Name=RingerModeSilent/Content}">
+                                            Text="停止仅音频">
                                             <MenuFlyoutItem.Icon>
                                                 <FontIcon Glyph="&#xE74F;" />
                                             </MenuFlyoutItem.Icon>
                                         </MenuFlyoutItem>
                                     </MenuFlyout>
                                 </Button.Flyout>
+                            </Button>
+
+                            <!--  SFTP Button  -->
+                            <Button
+                                Padding="5"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Command="{x:Bind ViewModel.StartSftpConnectionCommand}"
+                                ToolTipService.ToolTip="SFTP 连接">
+                                <FontIcon Glyph="&#xE8A5;" />
                             </Button>
 
                             <!--  Battery status  -->
@@ -229,12 +236,46 @@
                             </StackPanel>
                         </StackPanel>
 
-                        <!--  Connection Status Card  -->
-                        <Button
-                            HorizontalAlignment="Left"
-                            Command="{x:Bind ViewModel.ToggleConnectionCommand}"
-                            Content="{x:Bind ViewModel.Device.ConnectionStatus, Converter={StaticResource BoolToConnectionButtonTextConverter}, Mode=OneWay}"
-                            Visibility="{x:Bind ViewModel.Device.Name, Converter={StaticResource EmptyObjectToVisibilityConverter}, Mode=OneWay}" />
+                        <!--  Connection Status Card with ADB Info  -->
+                        <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                            <Button
+                                HorizontalAlignment="Left"
+                                Command="{x:Bind ViewModel.ToggleConnectionCommand}"
+                                Content="{x:Bind ViewModel.Device.ConnectionStatus, Converter={StaticResource BoolToConnectionButtonTextConverter}, Mode=OneWay}"
+                                Visibility="{x:Bind ViewModel.Device.Name, Converter={StaticResource EmptyObjectToVisibilityConverter}, Mode=OneWay}" />
+                            
+                            <!--  ADB Connection Status Labels  -->
+                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.AdbConnectionTypes, Mode=OneWay}" Visibility="{x:Bind ViewModel.AdbConnectionTypes.Count, Converter={StaticResource EmptyObjectToVisibilityConverter}, Mode=OneWay}">
+                                <ItemsRepeater.Layout>
+                                    <StackLayout Orientation="Horizontal" Spacing="5" />
+                                </ItemsRepeater.Layout>
+                                <ItemsRepeater.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <Border
+                                            Padding="5,4"
+                                            Background="{ThemeResource SystemAccentColor}"
+                                            BorderBrush="{ThemeResource SystemAccentColor}"
+                                            BorderThickness="1"
+                                            CornerRadius="4">
+                                            <StackPanel Orientation="Vertical" HorizontalAlignment="Center" Spacing="0">
+                                                <TextBlock
+                                                    FontSize="12"
+                                                    FontWeight="SemiBold"
+                                                    Foreground="White"
+                                                    HorizontalTextAlignment="Center"
+                                                    Text="{x:Bind Mode=OneWay}" />
+                                                <TextBlock
+                                                    FontSize="10"
+                                                    FontWeight="Normal"
+                                                    Foreground="White"
+                                                    HorizontalTextAlignment="Center"
+                                                    Text="adb" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsRepeater.ItemTemplate>
+                            </ItemsRepeater>
+                        </StackPanel>
                     </StackPanel>
                 </Grid>
 
