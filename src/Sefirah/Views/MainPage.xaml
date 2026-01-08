@@ -11,6 +11,7 @@
     xmlns:not_win="http://uno.ui/not_win"
     xmlns:userControls="using:Sefirah.UserControls"
     xmlns:utu="using:Uno.Toolkit.UI"
+    xmlns:viewmodels="using:Sefirah.ViewModels"
     xmlns:win="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     Background="{ThemeResource App.PageBackgroundBrush}"
     mc:Ignorable="not_win"
@@ -37,6 +38,7 @@
         <converters:EmptyObjectToVisibilityConverter x:Key="EmptyObjectToVisibilityConverter" />
         <converters:EmptyObjectToVisibilityConverter x:Key="InverseEmptyObjectToVisibilityConverter" Inverse="True" />
         <converters:StringToImageSourceConverter x:Key="StringToImageSourceConverter" />
+        <converters:AdbIconToTypeConverter x:Key="AdbIconToTypeConverter" />
 
         <!-- Phone Frame Overlay Animations -->
         <Storyboard x:Key="FadeInAnimation" x:Name="FadeInStoryboard">
@@ -234,12 +236,46 @@
                             </StackPanel>
                         </StackPanel>
 
-                        <!--  Connection Status Card  -->
-                        <Button
-                            HorizontalAlignment="Left"
-                            Command="{x:Bind ViewModel.ToggleConnectionCommand}"
-                            Content="{x:Bind ViewModel.Device.ConnectionStatus, Converter={StaticResource BoolToConnectionButtonTextConverter}, Mode=OneWay}"
-                            Visibility="{x:Bind ViewModel.Device.Name, Converter={StaticResource EmptyObjectToVisibilityConverter}, Mode=OneWay}" />
+                        <!--  Connection Status Card with ADB Info  -->
+                        <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+                            <Button
+                                HorizontalAlignment="Left"
+                                Command="{x:Bind ViewModel.ToggleConnectionCommand}"
+                                Content="{x:Bind ViewModel.Device.ConnectionStatus, Converter={StaticResource BoolToConnectionButtonTextConverter}, Mode=OneWay}"
+                                Visibility="{x:Bind ViewModel.Device.Name, Converter={StaticResource EmptyObjectToVisibilityConverter}, Mode=OneWay}" />
+                            
+                            <!--  ADB Connection Status Labels  -->
+                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.AdbConnectionTypes, Mode=OneWay}" Visibility="{x:Bind ViewModel.AdbConnectionTypes.Count, Converter={StaticResource EmptyObjectToVisibilityConverter}, Mode=OneWay}">
+                                <ItemsRepeater.Layout>
+                                    <StackLayout Orientation="Horizontal" Spacing="5" />
+                                </ItemsRepeater.Layout>
+                                <ItemsRepeater.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <Border
+                                            Padding="5,4"
+                                            Background="{ThemeResource SystemAccentColor}"
+                                            BorderBrush="{ThemeResource SystemAccentColor}"
+                                            BorderThickness="1"
+                                            CornerRadius="4">
+                                            <StackPanel Orientation="Vertical" HorizontalAlignment="Center" Spacing="0">
+                                                <TextBlock
+                                                    FontSize="12"
+                                                    FontWeight="SemiBold"
+                                                    Foreground="White"
+                                                    HorizontalTextAlignment="Center"
+                                                    Text="{x:Bind Mode=OneWay}" />
+                                                <TextBlock
+                                                    FontSize="10"
+                                                    FontWeight="Normal"
+                                                    Foreground="White"
+                                                    HorizontalTextAlignment="Center"
+                                                    Text="adb" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsRepeater.ItemTemplate>
+                            </ItemsRepeater>
+                        </StackPanel>
                     </StackPanel>
                 </Grid>
 

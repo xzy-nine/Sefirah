@@ -566,3 +566,27 @@ internal sealed partial class SubscriptionToIconConverter : IValueConverter
         throw new NotImplementedException();
     }
 }
+
+internal sealed partial class AdbIconToTypeConverter : IValueConverter
+{
+    public static readonly AdbIconToTypeConverter Instance = new();
+    
+    public object Convert(object value, Type targetType, object parameter, string language)
+    {
+        if (value is string icon)
+        {
+            return icon switch
+            {
+                "\uE89E" => "USB",
+                "\uE927" => "WiFi",
+                _ => string.Empty
+            };
+        }
+        return string.Empty;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, string language)
+    {
+        throw new NotImplementedException();
+    }
+}
