@@ -67,7 +67,7 @@ public sealed partial class MainPageViewModel : BaseViewModel
     {
         get
         {
-            return IsAudioOnlyRunning ? "仅音频播放中" : "未转发音频";
+            return IsAudioOnlyRunning ? "仅音频播放中" : "未转发音频";//TODO 存在问题,图标变了,悬浮文本没变
         }
     }
     #endregion
@@ -84,6 +84,7 @@ public sealed partial class MainPageViewModel : BaseViewModel
                     OnPropertyChanged(nameof(Device));
                     OnPropertyChanged(nameof(IsAudioOnlyRunning));
                     OnPropertyChanged(nameof(AudioStatusIcon));
+                    OnPropertyChanged(nameof(AudioStatusText));
                 }
             };
         }
@@ -108,6 +109,7 @@ public sealed partial class MainPageViewModel : BaseViewModel
     {
         OnPropertyChanged(nameof(IsAudioOnlyRunning));
         OnPropertyChanged(nameof(AudioStatusIcon));
+        OnPropertyChanged(nameof(AudioStatusText));
     }
 
     /// <summary>
