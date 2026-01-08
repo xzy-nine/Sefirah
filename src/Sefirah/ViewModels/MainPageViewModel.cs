@@ -84,6 +84,7 @@ public sealed partial class MainPageViewModel : BaseViewModel
                     OnPropertyChanged(nameof(Device));
                     OnPropertyChanged(nameof(IsAudioOnlyRunning));
                     OnPropertyChanged(nameof(AudioStatusIcon));
+                    OnPropertyChanged(nameof(AudioStatusText));
                 }
             };
         }
@@ -108,6 +109,7 @@ public sealed partial class MainPageViewModel : BaseViewModel
     {
         OnPropertyChanged(nameof(IsAudioOnlyRunning));
         OnPropertyChanged(nameof(AudioStatusIcon));
+        OnPropertyChanged(nameof(AudioStatusText));
     }
 
     /// <summary>
