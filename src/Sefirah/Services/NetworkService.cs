@@ -179,103 +179,25 @@ public class NetworkService(
                     return;
                 }
                 
-                if (device.SharedSecret is null)
-                {
-                    logger.LogWarning("无法发送加密消息：设备 {deviceId} 缺少共享密钥", deviceId);
-                    return;
-                }
-                
                 if (localPublicKey is null || localDeviceId is null)
                 {
                     logger.LogWarning("本地身份未初始化，跳过发送");
                     return;
                 }
                 
-                // 尝试获取设备的IP地址
-                if (device.IpAddresses is null || device.IpAddresses.Count == 0)
-                {
-                    logger.LogWarning("跳过发送：设备 {deviceId} 没有IP地址", deviceId);
-                    return;
-                }
-                
-                string ipAddress = device.IpAddresses.First();
-                const int notifyRelayPort = 23333; // 使用与本机相同的端口
-                
-                // 显示目标设备信息
-                logger.LogInformation("发送到设备：{deviceName} ({ipAddress})，deviceId={deviceId}", device.Name, ipAddress, deviceId);
-
-                
-                // 限制日志长度，特别是base64图片数据
-                string loggableJson = requestJson;
-                try
-                {
-                    // 限制JSON总长度为100个字符
-                    if (loggableJson.Length > 100)
-                    {
-                        loggableJson = loggableJson.Substring(0, 100) + "...";
-                    }
-                }
-                catch
-                {
-                    // 如果处理失败，使用原始JSON的前100个字符
-                    if (requestJson.Length > 100)
-                    {
-                        loggableJson = requestJson.Substring(0, 100) + "...";
-                    }
-                }
-                logger.LogInformation("请求 JSON：{loggableJson}", loggableJson);
-                
-                try
-                {
-                    var encryptedPayload = NotifyCryptoHelper.Encrypt(requestJson, device.SharedSecret);
-                    var framedMessage = $"{messageType}:{localDeviceId}:{localPublicKey}:{encryptedPayload}\n";
-                    byte[] messageBytes = Encoding.UTF8.GetBytes(framedMessage);
-                    logger.LogDebug("消息字节长度：{length}", messageBytes.Length);
-
-                    // 使用TCP客户端主动连接并发送消息，设置较短的超时时间
-                    using var tcpClient = new System.Net.Sockets.TcpClient();
-                    tcpClient.ReceiveTimeout = 3000; // 设置接收超时为3秒
-                    tcpClient.SendTimeout = 3000; // 设置发送超时为3秒
-                    
-
-                    
-                    // 使用带超时的连接方式
-                    var connectTask = tcpClient.ConnectAsync(ipAddress, notifyRelayPort);
-                    var connectResult = await Task.WhenAny(connectTask, Task.Delay(3000));
-                    
-                    if (connectResult != connectTask || !connectTask.IsCompletedSuccessfully)
-                    {
-                        logger.LogWarning("连接设备超时：{ipAddress}:{port}，跳过发送", ipAddress, notifyRelayPort);
-                        return;
-                    }
-                    
-
-                    
-                    using var networkStream = tcpClient.GetStream();
-                    networkStream.ReadTimeout = 3000; // 设置流接收超时为3秒
-                    networkStream.WriteTimeout = 3000; // 设置流发送超时为3秒
-                    
-                    // 发送消息
-                    await networkStream.WriteAsync(messageBytes, 0, messageBytes.Length);
-                    // 确保数据完全发送
-                    await networkStream.FlushAsync();
-                    logger.LogInformation("成功发送请求：{description}，deviceId={deviceId}", description, deviceId);
-                    
-                    // 关闭连接
-                    tcpClient.Close();
-                }
-                catch (ObjectDisposedException ex)
-                {
-                    logger.LogError("发送请求时 Socket 已释放：deviceId={deviceId}", deviceId);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogError("发送请求时出错：deviceId={deviceId}，{message}", deviceId, ex.Message);
-                }
+                // 使用统一的协议发送器发送消息
+                await ProtocolSender.SendEncryptedAsync(
+                    logger, 
+                    device, 
+                    messageType, 
+                    requestJson, 
+                    localDeviceId, 
+                    localPublicKey
+                );
             }
             catch (Exception ex)
             {
-                logger.LogError("发送请求时出错：deviceId={deviceId}，{message}", deviceId, ex.Message);
+                logger.LogError(ex, "发送请求时出错：deviceId={deviceId}", deviceId);
             }
         });
     }
@@ -1039,6 +961,9 @@ public class NetworkService(
                 return null;
             }
 
+            // 获取会话的远程IP地址
+            var connectedSessionIpAddress = session.Socket.RemoteEndPoint?.ToString()?.Split(':')[0];
+            
             await App.MainWindow.DispatcherQueue.EnqueueAsync(() =>
             {
                 device.Session = session;
@@ -1047,6 +972,20 @@ public class NetworkService(
                 device.SharedSecret ??= NotifyCryptoHelper.GenerateSharedSecretBytes(localPublicKey, remotePublicKey);
                 device.LastHeartbeat = DateTime.UtcNow;
                 deviceManager.ActiveDevice ??= device;
+                
+                // 更新设备IP地址
+                if (!string.IsNullOrEmpty(connectedSessionIpAddress))
+                {
+                    // 如果IP地址已存在且不同，或者IP地址列表为空，更新IP地址
+                    if (device.IpAddresses == null || device.IpAddresses.Count == 0 || !device.IpAddresses.Contains(connectedSessionIpAddress))
+                    {
+                        logger.LogInformation("更新设备 {deviceName} 的IP地址为 {newIp}", device.Name, connectedSessionIpAddress);
+                        logger.LogInformation("会话远程IP地址：{ipAddress}", connectedSessionIpAddress);
+                        
+                        // 清空旧的IP地址列表，只保留新的IP地址
+                        device.IpAddresses = [connectedSessionIpAddress];
+                    }
+                }
             });
 
             BindSession(device.Id, session);
