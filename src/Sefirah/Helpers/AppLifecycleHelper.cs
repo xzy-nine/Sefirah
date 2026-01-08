@@ -70,6 +70,11 @@ public static class AppLifecycleHelper
         notificationService.Initialize();
         await deviceManager.Initialize();
 
+        // 为LocalSocketRelayServer设置logger并启动服务器
+        var socketLogger = Ioc.Default.GetRequiredService<ILogger>();
+        LocalSocketRelayServer.SetLogger(socketLogger);
+        LocalSocketRelayServer.Start();
+
         await Task.WhenAll(
             networkService.StartServerAsync(),
             discoveryService.StartDiscoveryAsync(),

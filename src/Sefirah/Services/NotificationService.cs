@@ -329,8 +329,64 @@ public class NotificationService(
                                 // 只有当通知是新的时，才会发送到Windows通知中心
                                 if (shouldSendNotification)
                                 {
-                                    // 发送通知到Windows通知中心
-                                    await platformNotificationHandler.ShowRemoteNotification(message, device.Id);
+                                    // 尝试通过TCP发送通知到本地小部件
+                                    bool tcpSentSuccessfully = false;
+                                    try
+                                    {
+                                        // 将图标编码为data URL
+                                        string? iconUrl = null;
+                                        if (!string.IsNullOrEmpty(message.AppPackage))
+                                        {
+                                            try
+                                            {
+                                                // 使用IconUtils.GetAppIconFilePath获取实际的文件系统路径
+                                                string iconFilePath = IconUtils.GetAppIconFilePath(message.AppPackage);
+                                                if (System.IO.File.Exists(iconFilePath))
+                                                {
+                                                    var bytes = System.IO.File.ReadAllBytes(iconFilePath);
+                                                    var ext = System.IO.Path.GetExtension(iconFilePath).ToLowerInvariant();
+                                                    string contentType = ext switch
+                                                    {
+                                                        ".png" => "image/png",
+                                                        ".jpg" or ".jpeg" => "image/jpeg",
+                                                        ".gif" => "image/gif",
+                                                        ".webp" => "image/webp",
+                                                        ".svg" => "image/svg+xml",
+                                                        _ => "application/octet-stream",
+                                                    };
+                                                    var b64 = Convert.ToBase64String(bytes);
+                                                    iconUrl = $"data:{contentType};base64,{b64}";
+                                                }
+                                            }
+                                            catch (Exception ex)
+                                            {
+                                                logger.LogError(ex, "将图标编码为data URL失败");
+                                            }
+                                        }
+                                        
+                                        // 发送TCP通知
+                                        tcpSentSuccessfully = await LocalSocketRelayServer.SendNotificationAsync(
+                                            message.AppName!, 
+                                            message.AppPackage!, 
+                                            message.Title!, 
+                                            message.Text ?? string.Empty, 
+                                            iconUrl);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        logger.LogError(ex, "发送TCP通知失败");
+                                    }
+                                    
+                                    // 如果TCP通知发送成功，则跳过Windows系统通知
+                                    if (!tcpSentSuccessfully)
+                                    {
+                                        // 发送通知到Windows通知中心
+                                        await platformNotificationHandler.ShowRemoteNotification(message, device.Id);
+                                    }
+                                    else
+                                    {
+                                        logger.LogDebug("TCP通知发送成功，跳过Windows系统通知");
+                                    }
                                 }
                             }
                         });
