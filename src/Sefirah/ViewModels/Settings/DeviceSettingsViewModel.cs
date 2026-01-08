@@ -11,17 +11,6 @@ namespace Sefirah.ViewModels.Settings;
 public sealed partial class DeviceSettingsViewModel : BaseViewModel
 {
     #region Display Properties
-    public string DisplayPhoneNumbers
-    {
-        get
-        {
-            if (Device?.PhoneNumbers == null || Device.PhoneNumbers.Count == 0)
-                return "No phone numbers";
-
-            return string.Join(", ", Device.PhoneNumbers.Select(p => p.Number));
-        }
-    }
-
     public string DisplayIpAddresses
     {
         get

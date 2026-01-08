@@ -329,9 +329,6 @@ public class DeviceInfo : SocketMessage
 
     [JsonPropertyName("publicKey")]
     public string PublicKey { get; set; }
-
-    [JsonPropertyName("phoneNumbers")]
-    public List<PhoneNumber> PhoneNumbers { get; set; } = [];
 }
 
 /// <summary>
@@ -612,19 +609,6 @@ public class DeviceRingerMode : SocketMessage
 
 
 
-/// <summary>
-/// 电话号码类
-/// 路径: Sefirah.Data.Models.PhoneNumber
-/// 功能: 包含电话号码信息，如号码和订阅ID
-/// 用于: DeviceInfo.PhoneNumbers 列表中
-/// </summary>
-public class PhoneNumber
-{
-    [JsonPropertyName("number")]
-    public string Number { get; set; } = string.Empty;
 
-    [JsonPropertyName("subscriptionId")]
-    public int SubscriptionId { get; set; } = -1;
-}
 
 

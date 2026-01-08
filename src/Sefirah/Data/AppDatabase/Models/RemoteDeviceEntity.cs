@@ -35,16 +35,6 @@ public partial class RemoteDeviceEntity
         set => IpAddressesJson = value is null ? null : JsonSerializer.Serialize(value);
     }
 
-    [Column("PhoneNumbers")]
-    public string? PhoneNumbersJson { get; set; }
-
-    [Ignore]
-    public List<PhoneNumber>? PhoneNumbers
-    {
-        get => string.IsNullOrEmpty(PhoneNumbersJson) ? null : JsonSerializer.Deserialize<List<PhoneNumber>>(PhoneNumbersJson);
-        set => PhoneNumbersJson = value is null ? null : JsonSerializer.Serialize(value);
-    }
-
     #region Helpers
     internal async Task<PairedDevice> ToPairedDevice()
     {
@@ -53,7 +43,6 @@ public partial class RemoteDeviceEntity
             Name = Name,
             Model = Model,
             IpAddresses = IpAddresses,
-            PhoneNumbers = PhoneNumbers,
             Wallpaper = await ImageHelper.ToBitmapAsync(WallpaperBytes),
             SharedSecret = SharedSecret,
             RemotePublicKey = PublicKey,

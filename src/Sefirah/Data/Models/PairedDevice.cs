@@ -23,8 +23,6 @@ public partial class PairedDevice : ObservableObject
 
     public List<string>? IpAddresses { get; set; } = [];
 
-    public List<PhoneNumber>? PhoneNumbers { get; set; } = [];
-
     private ImageSource? wallpaper;
     public ImageSource? Wallpaper
     {
@@ -206,7 +204,6 @@ public partial class PairedDevice : ObservableObject
                             Name = Name,
                             Model = Model,
                             IpAddresses = IpAddresses,
-                            PhoneNumbers = PhoneNumbers,
                             SharedSecret = SharedSecret,
                             PublicKey = RemotePublicKey,
                             HasSentSftpRequest = value

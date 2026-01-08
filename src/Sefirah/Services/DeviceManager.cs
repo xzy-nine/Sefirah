@@ -51,7 +51,6 @@ public partial class DeviceManager(ILogger<DeviceManager> logger, DeviceReposito
                 existingDevice.Name = device.Name;
                 existingDevice.Model = device.Model;
                 existingDevice.IpAddresses = device.IpAddresses;
-                existingDevice.PhoneNumbers = device.PhoneNumbers;
                 existingDevice.Wallpaper = device.Wallpaper;
                 existingDevice.Session = device.Session;
                 existingDevice.SharedSecret = device.SharedSecret;
@@ -180,7 +179,6 @@ public partial class DeviceManager(ILogger<DeviceManager> logger, DeviceReposito
                         PublicKey = remotePublicKey,
                         WallpaperBytes = null,
                         IpAddresses = ipAddress is not null ? [ipAddress] : [],
-                        PhoneNumbers = [],
                     };
 
                     repository.AddOrUpdateRemoteDevice(newDevice);
